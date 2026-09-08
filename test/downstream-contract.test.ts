@@ -12,11 +12,18 @@ import { scenarios } from "../src/scenarios.js";
  * here — in a plain unit test — instead of in a suite that needs containers and
  * a browser.
  *
- * Recorded 2026-09-05 from:
+ * Recorded 2026-09-08 from:
  *   browserhive/test/e2e/truncation.e2e.test.ts  largeBody(capBytes + 1 MiB), capBytes ≤ 1 MiB
  *   browserhive/test/e2e/behaviors.e2e.test.ts   blockMainThread(6000, 20_000)
  *   browserhive/test/e2e/session.e2e.test.ts     cookieAndStorage(mark)
  *   browserhive/test/e2e/retry.e2e.test.ts       failsThenSucceeds(2, "e2e")
+ *   browserhive/test/e2e/session.e2e.test.ts     largeStorage(3 MiB)   ← see below
+ *
+ * The last row is the exception to "actually passes": `/large-storage` and the
+ * consumer's storage cap were written together, so the caller lands after this
+ * release. It is recorded now because the argument is what set
+ * `MAX_STORAGE_BYTES` — leaving it out would let a later tightening pass here
+ * and break the caller it was sized for.
  *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
@@ -40,6 +47,7 @@ describe("values BrowserHive passes today", () => {
     ["httpStatus(404)", scenarios.httpStatus(404)],
     ["asset below.svg", scenarios.asset("below.svg")],
     ["cookieAndStorage with a tag", scenarios.cookieAndStorage("mark")],
+    ["largeStorage at 3 MiB", scenarios.largeStorage(3 * 1024 * 1024)],
   ])("%s is not refused", async (name, path) => {
     // 404, 503 and 302 are all legitimate answers; 400 means a bound is too
     // tight and the submodule bump would break the downstream suite.

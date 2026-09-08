@@ -1,3 +1,5 @@
+import { runInNewContext } from "node:vm";
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
@@ -140,6 +142,74 @@ describe("controllable responses", () => {
   it("/slow-body trickles the requested number of bytes", async () => {
     const res = await fetchOk(app, "/slow-body?bytes=50&overMs=0");
     expect(res.rawPayload.length).toBe(50);
+  });
+
+  /**
+   * Runs the page's own script against a fake storage rather than matching its
+   * text. Only a browser can fill real storage, but the logic that decides
+   * *what* to write — and what to report when a write fails — is plain
+   * JavaScript, and asserting on the source instead lets a defect through: the
+   * string `errors` survives deleting the code that fills it.
+   */
+  const runStoragePage = (
+    html: string,
+    { quota = Infinity, truncateTo = Infinity }: { quota?: number; truncateTo?: number } = {},
+  ): { local: number; session: number; errors: string[] } => {
+    const area = (): Storage => {
+      const held = new Map<string, string>();
+      return {
+        setItem(key: string, value: string) {
+          if (key.length + value.length > quota) {
+            const err = new Error("quota");
+            err.name = "QuotaExceededError";
+            throw err;
+          }
+          // Some storage implementations keep less than they were handed
+          // without saying so; that is what the page's read-back is for.
+          held.set(key, value.slice(0, truncateTo));
+        },
+        getItem: (key: string) => held.get(key) ?? null,
+      } as unknown as Storage;
+    };
+    const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+    if (script === undefined) throw new Error("the page carries no script");
+    const el = { textContent: "" };
+    runInNewContext(script, {
+      localStorage: area(),
+      sessionStorage: area(),
+      document: { getElementById: () => el },
+    });
+    return JSON.parse(el.textContent) as { local: number; session: number; errors: string[] };
+  };
+
+  it("/large-storage splits the requested total between the two areas", async () => {
+    const res = await fetchOk(app, "/large-storage?bytes=2048");
+    const stored = runStoragePage(res.body);
+    // Half each, not the whole total in one: a single area cannot hold enough
+    // to cross a consumer's ceiling before the browser's own quota stops it.
+    expect(stored).toEqual({ local: 1024, session: 1024, errors: [] });
+  });
+
+  it("/large-storage reports a write it could not make", async () => {
+    const res = await fetchOk(app, "/large-storage?bytes=2048");
+    const stored = runStoragePage(res.body, { quota: 100 });
+    // Silence here would be indistinguishable from a consumer's cap working.
+    expect(stored.errors).toEqual([
+      "local: QuotaExceededError",
+      "session: QuotaExceededError",
+    ]);
+    expect(stored.local).toBe(0);
+    expect(stored.session).toBe(0);
+  });
+
+  it("/large-storage counts what the area kept, not what it was handed", async () => {
+    const res = await fetchOk(app, "/large-storage?bytes=2048");
+    // A write that quietly keeps less than it was given raises no error, so the
+    // only way to notice is to ask the area. Reporting `fill.length` instead
+    // would claim 1024 here and the consumer would measure its cap against a
+    // number no storage ever held.
+    const stored = runStoragePage(res.body, { truncateTo: 300 });
+    expect(stored).toEqual({ local: 304, session: 304, errors: [] });
   });
 });
 
@@ -349,6 +419,8 @@ describe("malformed scenario parameters", () => {
     ["status not a number", "/http-status/abc"],
     ["status out of range", "/http-status/999"],
     ["bytes not a number", "/large-body?bytes=abc"],
+    ["storage bytes not a number", "/large-storage?bytes=abc"],
+    ["storage bytes over the quota-derived ceiling", "/large-storage?bytes=67108864"],
     ["slow-body overMs not a number", "/slow-body?bytes=10&overMs=abc"],
     ["hops not a number", "/server-redirect-chain/abc"],
     ["failTimes not a number", "/fails-then-succeeds?failTimes=abc"],
@@ -363,6 +435,7 @@ describe("malformed scenario parameters", () => {
     ["/http-status/204", 204],
     ["/server-redirect-chain/2", 302],
     ["/large-body?bytes=100", 200],
+    ["/large-storage?bytes=2048", 200],
     ["/slow-body?bytes=10&overMs=0", 200],
   ])("still serves %s", async (url, expected) => {
     expect((await app.inject(url)).statusCode).toBe(expected);

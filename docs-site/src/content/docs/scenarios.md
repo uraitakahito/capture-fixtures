@@ -131,10 +131,15 @@ did.
 
 ### `/cookie-and-storage` — state that outlives a page
 
-Sets `meadow=1` as an HttpOnly cookie **and** writes to `localStorage`.
+Sets `meadow=<tag>` as an HttpOnly cookie **and** writes the same tag to both
+`localStorage` and `sessionStorage`. The page reports what *arrived* before
+overwriting it, so a consumer reads the previous capture's state rather than
+its own.
 
-Two stores because they are cleared by different mechanisms and a reset that
-only handles one leaves the other. That leak matters: a worker reuses its
+Three stores because they are cleared by different mechanisms and a reset that
+handles some of them leaves the rest. `sessionStorage` is the discriminating
+one: the tab carries it, not the browser context, so it is the only store that
+separates "the same context was reused" from "the same tab was reused". That leak matters: a worker reuses its
 browser across captures, so state from task N shows up in task N+1's archive —
 and it shows up as *content*, silently, not as an error.
 
@@ -211,6 +216,33 @@ Different failure from `/slow-response`: here the response **starts immediately*
 then arrives slowly. Headers are in, the status is 200, and a timeout measured
 from request-start behaves differently from one measured between chunks. Code
 that treats "response received" as "done" passes `/slow-response` and hangs on `/slow-body`.
+
+### `/large-storage?bytes=` — caps on recorded storage values
+
+Fills both web storage areas until they total `bytes`, one key per area.
+Defaults to 3 MiB.
+
+An archiver that records the *values* in web storage, not just their size, has
+the same problem `/large-body` poses for response bodies — except storage is
+read out of the page rather than received from an origin, so a byte cap on
+responses never counts it.
+
+:::caution[`bytes` is a total, split between the two areas — on purpose]
+Each area carries its own quota of roughly 5 MiB, and the browser counts that
+quota in **UTF-16 code units** while an archiver measuring its own output counts
+**UTF-8**. One ASCII character is 1 byte of UTF-8 and 2 of UTF-16, so a single
+area tops out near 2.5 MB as the archiver measures it.
+
+Put the whole total in one area and you hit the quota *before* the archiver's
+ceiling — its cap never fires, and its test passes anyway, having proved
+nothing. Splitting keeps each write inside its own quota while the total clears
+a ceiling in the 2 MiB range.
+:::
+
+The page reports what it **actually** stored, per area, in `<pre id="stored">`,
+along with any `QuotaExceededError`. A quota failure and a working cap look
+identical in an archive — both leave values out — so read those numbers before
+concluding the cap did anything.
 
 ### `/fails-then-succeeds?failTimes=&key=` — deterministic retries
 
