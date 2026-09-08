@@ -54,6 +54,7 @@ describe("every scenario reaches the fixture", () => {
     ["slowResponse", scenarios.slowResponse(50)],
     ["slowBody", scenarios.slowBody(64, 20)],
     ["largeBody", scenarios.largeBody(256)],
+    ["largeStorage", scenarios.largeStorage(2048)],
     ["httpStatus", scenarios.httpStatus(503)],
     ["serverRedirectChain", scenarios.serverRedirectChain(2)],
     ["failsThenSucceeds", scenarios.failsThenSucceeds(1, "contract")],

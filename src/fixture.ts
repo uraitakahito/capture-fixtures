@@ -157,6 +157,43 @@ const cookieAndStorageHtml = (cookieTag: string, nextTag: string): string =>
 </body></html>`;
 
 /**
+ * A page that fills both web storage areas until they total `bytes`.
+ *
+ * Splits the total evenly, one key per area, because each area carries its own
+ * quota — see {@link scenarios.largeStorage} for why a single area cannot hold
+ * enough to cross a consumer's ceiling.
+ *
+ * Reports what was **actually** stored rather than what was asked for. A quota
+ * failure leaves values out of the archive, and so does a consumer's cap
+ * working exactly as intended; a consumer that cannot tell those apart has a
+ * test that passes whether or not the thing it tests is running. Reporting a
+ * count instead of a yes/no follows `cookieAndStorageHtml`: the page states
+ * what happened and lets the consumer decide what that means.
+ */
+const largeStorageHtml = (bytes: number): string => {
+  const half = Math.floor(bytes / 2);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>large storage</title></head><body>
+<pre id="stored">pending</pre>
+<script>
+  var key = "bulk";
+  var fill = "a".repeat(Math.max(0, ${String(half)} - key.length));
+  var stored = { local: 0, session: 0, errors: [] };
+  [["local", localStorage], ["session", sessionStorage]].forEach(function (pair) {
+    try {
+      pair[1].setItem(key, fill);
+      // Read back rather than trusting the write: the count is only evidence
+      // if it comes from the area itself.
+      stored[pair[0]] = key.length + (pair[1].getItem(key) || "").length;
+    } catch (err) {
+      stored.errors.push(pair[0] + ": " + (err && err.name ? err.name : String(err)));
+    }
+  });
+  document.getElementById("stored").textContent = JSON.stringify(stored);
+</script>
+</body></html>`;
+};
+
+/**
  * The image variants a 1280px / DPR 1 capture never asks for.
  *
  * BrowserHive's `autofetch` exists to pull these in: at DPR 1 the browser picks
@@ -233,6 +270,19 @@ setTimeout(holdThread, 0);
 const MAX_REPEAT_FOR_MS = 30_000;
 const MAX_DELAY_MS = 120_000;
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Ceiling for `/large-storage`, as a total across both areas.
+ *
+ * Deliberately not `MAX_BODY_BYTES`. A response body is limited by what the
+ * socket will carry; web storage is limited by a per-area browser quota of
+ * roughly 5 MiB, counted in UTF-16 code units. Half of this total lands in each
+ * area, so 4 MiB here means 2 MiB of ASCII per area — 4 MiB of UTF-16, inside
+ * the quota with room to spare. Allowing 64 MiB would let a caller ask for a
+ * page that cannot exist and still get a 200 back, which is the failure mode
+ * `numbers()` exists to prevent.
+ */
+const MAX_STORAGE_BYTES = 4 * 1024 * 1024;
 const MAX_HOPS = 20;
 const MAX_FAIL_TIMES = 100;
 
@@ -454,6 +504,15 @@ export function buildFixture(): FastifyInstance {
     (request, reply) => {
       const bytes = request.query.bytes ?? 1_048_576;
       return reply.type("text/plain").send("a".repeat(bytes));
+    },
+  );
+
+  app.get<{ Querystring: { bytes?: number } }>(
+    "/large-storage",
+    { schema: { querystring: numbers({ bytes: [0, MAX_STORAGE_BYTES] }) } },
+    (request, reply) => {
+      const bytes = request.query.bytes ?? 3_145_728;
+      return reply.type("text/html").send(largeStorageHtml(bytes));
     },
   );
 
