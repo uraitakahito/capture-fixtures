@@ -68,6 +68,24 @@ export const scenarios = {
     `/slow-body?bytes=${String(bytes)}&overMs=${String(overMs)}`,
   /** Responds with a body of `bytes` bytes — exercises response-size caps. */
   largeBody: (bytes: number): string => `/large-body?bytes=${String(bytes)}`,
+  /**
+   * Fills both web storage areas until they total `bytes` — exercises the caps
+   * a consumer puts on the storage values it records.
+   *
+   * `bytes` is a **total, split evenly between the two areas**, and that is the
+   * whole point of the page. Each area has its own quota (~5 MiB in Chrome)
+   * counted in UTF-16 code units, while a consumer measuring an archive counts
+   * UTF-8: one ASCII character is 1 byte of UTF-8 and 2 of UTF-16, so a single
+   * area tops out near 2.5 MB of UTF-8. Asking for more in one area hits the
+   * quota before it reaches a consumer's ceiling, and the consumer's cap then
+   * never fires — while its test still passes, for the wrong reason.
+   *
+   * The page reports what it actually stored, per area, in `<pre id="stored">`.
+   * A quota failure and a working cap look identical in the archive (both leave
+   * values out), so a consumer should read those numbers before concluding its
+   * cap did anything.
+   */
+  largeStorage: (bytes: number): string => `/large-storage?bytes=${String(bytes)}`,
   /** Responds with an arbitrary HTTP status — exercises the non-2xx branch. */
   httpStatus: (code: number): string => `/http-status/${String(code)}`,
   /** Server-side 302 chain of `hops`, ending at {@link scenarios.redirectTarget}. */
