@@ -267,6 +267,120 @@ scenarios.failsThenSucceeds(1, "single-retry-then-success")
 Serves `site/` (`hero.svg`, `below.svg`). Referenced by `/lazy-images`, and available
 directly when a test needs a sub-resource whose bytes it can predict.
 
+## Following links
+
+Every page here is `/links/hub` with exactly one thing changed. That is what
+makes the set discriminating: a crawler that follows nothing anywhere is broken,
+one that follows everything is applying no rule at all, and only the difference
+between the hub and a sibling separates the two.
+
+### `/links/hub` — the crawl baseline
+
+Three links to `/links/leaf/:id`, plus one to `/links/hidden`.
+
+The hidden link is there on purpose. A crawler has to reach this page, parse it,
+see that link, and still never fetch it — which is a different claim from "never
+found it". A page nobody links to proves nothing about robots.
+
+### `/links/leaf/:id` — where depth stops
+
+A page with no outbound links. `id` changes the URL and nothing else: depth and
+page budgets are counted in distinct URLs, so a fixture needing three more pages
+needs three ids.
+
+### `/links/nofollow` — `rel="nofollow"`
+
+The hub's three links with `rel="nofollow"` on the third.
+
+The first two are the control. Without them, a crawler that failed to parse the
+page at all would look exactly like one honouring the attribute — both fetch
+nothing, and both look correct.
+
+### `/links/off-origin` — leaving the origin
+
+Four links: one same-origin control, then a different host, a different port and
+a different scheme.
+
+The foreign host is under `.invalid`, which [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606)
+guarantees will never resolve. A crawler that wrongly follows it fails against a
+name that cannot exist, rather than reaching a stranger's server from someone's
+test suite.
+
+All three kinds are here because an origin is scheme+host+port. An implementation
+comparing only the host passes a host-only page while being wrong.
+
+### `/links/fragments` — one resource, two spellings
+
+`/links/leaf/1` and `/links/leaf/1#a`.
+
+`#a` is a position inside a page, not another page. A crawler that keeps the
+fragment captures the same page twice — and two archives of one page look exactly
+like two archives of two pages.
+
+### `/links/js` — links that only exist after script runs
+
+Three anchors built at `DOMContentLoaded`.
+
+:::caution[The served HTML contains no `<a` at all]
+That is the scenario. A consumer extracting links from the response body finds
+none; one extracting from the rendered DOM finds three. This is the only page
+here that can tell those two implementations apart, and an anchor slipping into
+the static HTML would silently end that.
+:::
+
+### `/links/js-late?afterMs=` — where a consumer stops looking
+
+One anchor appended `afterMs` after load. Default 5000.
+
+A `setTimeout`, deliberately, not an `IntersectionObserver`: the arrival is a
+deadline the caller chose, not a callback that might be late. Pass a small
+`afterMs` to assert the link **is** followed; raise it to find the boundary.
+
+Before the timer fires the page carries no link, so "not yet" and "never" are the
+same observation — which is exactly the position a consumer is in.
+
+### `/links/cycle/:side` — `a` ⇄ `b`
+
+Two pages linking to each other. `side` is `a` or `b`; anything else is a 404.
+
+A crawler without deduplication walks this until some *other* limit stops it, and
+then reports that limit as the reason it stopped. Nothing about the run looks
+wrong — the depth or page budget did its job, on a crawl that should never have
+got there.
+
+### `/links/fan-out?n=` — page budgets
+
+`n` links on one page, up to 200. Default 10.
+
+The one generated page here. A budget is the only link behaviour that needs more
+pages than a reader would want written out; everything else is a hand-written
+control.
+
+### `/links/hidden` — reachable, linked, and forbidden
+
+A plain page, linked from the hub and disallowed by `/robots.txt`.
+
+It is served, not 404'd. If it were missing, a crawler ignoring robots would also
+fail to fetch it and the scenario would pass for the wrong reason.
+
+### `/robots.txt` — the only robots policy here
+
+```
+User-agent: *
+Crawl-delay: 3
+Disallow: /links/hidden
+```
+
+Fixed rather than parameterised: a crawler fetches `/robots.txt` with no query
+string, so a knob could never reach it.
+
+:::caution[The delay is 3s so that it can be seen to win]
+A consumer that reads robots must end up waiting 3s between requests even when
+its own spacing is shorter. A value **below** the consumer's own default would be
+indistinguishable from being ignored — its spacing would dominate and the test
+would pass either way.
+:::
+
 ## Introspection
 
 Two test-only endpoints. They exist because *how many times* something was

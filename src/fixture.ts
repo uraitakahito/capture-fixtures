@@ -232,6 +232,175 @@ const RESPONSIVE_IMAGES_HTML = `<!doctype html><html><head><meta charset="utf-8"
 <video poster="/assets/poster.svg" width="64" height="64"></video>
 </body></html>`;
 
+/**
+ * The crawl baseline: three same-origin links, plus one robots forbids.
+ *
+ * Every other `/links/*` page is this one with exactly one thing changed. That
+ * is what makes the set discriminating — a crawler that follows nothing anywhere
+ * is broken, and a crawler that follows everything everywhere is not applying
+ * any rule. Only the difference between this page and its siblings separates the
+ * two.
+ *
+ * `/links/hidden` is linked from here on purpose. A crawler has to reach this
+ * page, see the link, and still not fetch it.
+ */
+const LINK_HUB_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>hub</title></head><body>
+<h1>hub</h1>
+<a href="/links/leaf/1">leaf 1</a>
+<a href="/links/leaf/2">leaf 2</a>
+<a href="/links/leaf/3">leaf 3</a>
+<a href="/links/hidden">hidden</a>
+</body></html>`;
+
+/**
+ * The hub with `rel="nofollow"` on the third link.
+ *
+ * The first two links are the control. Without them a crawler that failed to
+ * parse the page at all would look exactly like one honouring `nofollow`.
+ */
+const LINK_NOFOLLOW_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>nofollow</title></head><body>
+<h1>nofollow</h1>
+<a href="/links/leaf/1">followed</a>
+<a href="/links/leaf/2">followed</a>
+<a href="/links/leaf/3" rel="nofollow">not followed</a>
+</body></html>`;
+
+/**
+ * Links that leave the origin three different ways, with one control that does not.
+ *
+ * The foreign host is `.invalid` (RFC 2606) — guaranteed never to resolve. A
+ * crawler that wrongly follows it fails against a name that cannot exist,
+ * instead of reaching a stranger's server from someone's test suite.
+ *
+ * Port and scheme are here because "same origin" is scheme+host+port, and an
+ * implementation comparing only the host passes a host-only test while being
+ * wrong. The control link keeps the page from passing for a crawler that
+ * follows nothing.
+ */
+const LINK_OFF_ORIGIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>off-origin</title></head><body>
+<h1>off-origin</h1>
+<a href="/links/leaf/1">same origin (control)</a>
+<a href="http://elsewhere.invalid/page">different host</a>
+<a href="http://localhost:9/page">different port</a>
+<a href="https://localhost:8080/page">different scheme</a>
+</body></html>`;
+
+/**
+ * One resource, spelled two ways.
+ *
+ * `#a` is a position inside a page, not another page. A crawler that keeps the
+ * fragment captures `/links/leaf/1` twice — and the archive of a page captured
+ * twice looks exactly like the archive of a page captured once.
+ */
+const LINK_FRAGMENTS_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>fragments</title></head><body>
+<h1>fragments</h1>
+<a href="/links/leaf/1">plain</a>
+<a href="/links/leaf/1#a">same page, different fragment</a>
+</body></html>`;
+
+/**
+ * Three links that do not exist until script runs.
+ *
+ * **The served HTML contains no `<a` at all.** A consumer extracting links from
+ * the response body finds none; one extracting from the rendered DOM finds
+ * three. That difference is the whole scenario — it is the only page here that
+ * can tell those two implementations apart.
+ */
+const LINK_JS_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>js</title></head><body>
+<h1>js</h1>
+<div id="out"></div>
+<script>
+addEventListener("DOMContentLoaded", function () {
+  var out = document.getElementById("out");
+  for (var i = 1; i <= 3; i++) {
+    var el = document.createElement("a");
+    el.href = "/links/leaf/" + i;
+    el.textContent = "leaf " + i;
+    out.appendChild(el);
+  }
+});
+</script>
+</body></html>`;
+
+/**
+ * A link that appears `afterMs` after load — a deadline, not a race.
+ *
+ * `setTimeout`, deliberately. An `IntersectionObserver` or a `fetch` would make
+ * the arrival depend on the consumer's own behaviour, and then a red test says
+ * nothing about the consumer's deadline. Here the caller picks the moment: a
+ * small `afterMs` asserts the link IS seen, a large one finds where looking stops.
+ *
+ * The page carries no link before the timer fires, so "not yet" and "never" are
+ * the same observation — which is exactly the situation a consumer is in.
+ */
+const linkJsLateHtml = (afterMs: number): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>js-late</title></head><body>
+<h1>js-late</h1>
+<div id="out"></div>
+<script>
+setTimeout(function () {
+  var el = document.createElement("a");
+  el.href = "/links/leaf/1";
+  el.textContent = "late";
+  document.getElementById("out").appendChild(el);
+}, ${String(afterMs)});
+</script>
+</body></html>`;
+
+/**
+ * One half of a two-page cycle.
+ *
+ * A crawler without dedupe walks `a` → `b` → `a` … until some other limit stops
+ * it, and then reports **that** limit as why it stopped. The run looks orderly
+ * and the reason is wrong.
+ */
+const linkCycleHtml = (side: string, other: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>cycle ${side}</title></head><body>
+<h1>cycle ${side}</h1>
+<a href="/links/cycle/${other}">to ${other}</a>
+</body></html>`;
+
+/**
+ * `n` links on one page — the only generated page here.
+ *
+ * A page budget is the one link behaviour that needs more pages than a reader
+ * would want written out, so this is the one place a count is a parameter rather
+ * than a hand-written list.
+ */
+const linkFanOutHtml = (n: number): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>fan-out</title></head><body>
+<h1>fan-out ${String(n)}</h1>
+${Array.from({ length: n }, (_, i) => `<a href="/links/leaf/${String(i + 1)}">leaf ${String(i + 1)}</a>`).join("\n")}
+</body></html>`;
+
+/**
+ * A page with no outbound links — where depth stops.
+ *
+ * The id changes the URL and nothing else. Distinct URLs are what depth and page
+ * budgets are counted in; the body has no work to do beyond existing.
+ */
+const LINK_LEAF_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>leaf</title></head><body>
+<h1>leaf</h1>
+</body></html>`;
+
+/** Reachable and linked from the hub, but forbidden by `/robots.txt`. */
+const LINK_HIDDEN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>hidden</title></head><body>
+<h1>hidden</h1>
+</body></html>`;
+
+/**
+ * The only robots policy here.
+ *
+ * `Crawl-delay: 3` is chosen to be **longer** than a consumer would normally
+ * space its own requests. A shorter value would be indistinguishable from being
+ * ignored: the consumer's own spacing would dominate and the test would pass
+ * whether or not robots was read at all.
+ */
+const ROBOTS_TXT = `User-agent: *
+Crawl-delay: 3
+Disallow: /links/hidden
+`;
+
 const FAILING_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>retry</title></head><body><h1>retry</h1></body></html>`;
 const SUCCEEDED_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 
@@ -283,6 +452,19 @@ const MAX_BODY_BYTES = 64 * 1024 * 1024;
  * `numbers()` exists to prevent.
  */
 const MAX_STORAGE_BYTES = 4 * 1024 * 1024;
+/**
+ * Ceiling for `/links/js-late`. Long enough to sit past any reasonable settle
+ * window, short enough that a test asking for it still finishes.
+ */
+const MAX_AFTER_MS = 120_000;
+/**
+ * Ceiling for `/links/fan-out`. A page budget is the thing being exercised, and
+ * budgets in the consumers here are tens, not thousands — a larger page would
+ * only make the archive slow to produce and the failure slow to read.
+ */
+const MAX_FAN_OUT = 200;
+/** Ceiling for `/links/leaf/:id`. Ids only have to outnumber `MAX_FAN_OUT`. */
+const MAX_LEAF_ID = 200;
 const MAX_HOPS = 20;
 const MAX_FAIL_TIMES = 100;
 
@@ -444,6 +626,22 @@ export function buildFixture(): FastifyInstance {
   app.get("/responsive-images", (_request, reply) =>
     reply.type("text/html").send(RESPONSIVE_IMAGES_HTML));
 
+  // Link scenarios. Each is /links/hub with exactly one thing changed, so a
+  // crawler applying the wrong rule can be told apart from one that is broken.
+  app.get("/links/hub", (_request, reply) => reply.type("text/html").send(LINK_HUB_HTML));
+  app.get("/links/nofollow", (_request, reply) =>
+    reply.type("text/html").send(LINK_NOFOLLOW_HTML));
+  app.get("/links/off-origin", (_request, reply) =>
+    reply.type("text/html").send(LINK_OFF_ORIGIN_HTML));
+  app.get("/links/fragments", (_request, reply) =>
+    reply.type("text/html").send(LINK_FRAGMENTS_HTML));
+  app.get("/links/js", (_request, reply) => reply.type("text/html").send(LINK_JS_HTML));
+  app.get("/links/hidden", (_request, reply) => reply.type("text/html").send(LINK_HIDDEN_HTML));
+
+  // Served from a route rather than `site/`, which is mounted under /assets/.
+  // A crawler asks for /robots.txt at the root or not at all.
+  app.get("/robots.txt", (_request, reply) => reply.type("text/plain").send(ROBOTS_TXT));
+
   app.get<{ Querystring: { tag?: string } }>("/cookie-and-storage", (request, reply) => {
     const nextTag = request.query.tag ?? "notag";
     const arrived = /(?:^|;\s*)meadow=([A-Za-z0-9]+)/.exec(request.headers.cookie ?? "");
@@ -495,6 +693,43 @@ export function buildFixture(): FastifyInstance {
       const hops = request.params.hops;
       const target = hops > 0 ? `/server-redirect-chain/${String(hops - 1)}` : "/redirect-target";
       return reply.redirect(target, 302);
+    },
+  );
+
+  app.get<{ Params: { id: number } }>(
+    "/links/leaf/:id",
+    { schema: { params: numbers({ id: [1, MAX_LEAF_ID] }, ["id"]) } },
+    (_request, reply) => reply.type("text/html").send(LINK_LEAF_HTML),
+  );
+
+  app.get<{ Querystring: { afterMs?: number } }>(
+    "/links/js-late",
+    { schema: { querystring: numbers({ afterMs: [0, MAX_AFTER_MS] }) } },
+    (request, reply) => {
+      const afterMs = request.query.afterMs ?? 5_000;
+      return reply.type("text/html").send(linkJsLateHtml(afterMs));
+    },
+  );
+
+  app.get<{ Params: { side: string } }>(
+    "/links/cycle/:side",
+    {
+      // Not `numbers()` — the knob is a name, not a count. Anything but the two
+      // sides is a 404 rather than a page linking somewhere that does not exist.
+      schema: { params: { type: "object", properties: { side: { type: "string", enum: ["a", "b"] } }, required: ["side"] } },
+    },
+    (request, reply) => {
+      const side = request.params.side;
+      return reply.type("text/html").send(linkCycleHtml(side, side === "a" ? "b" : "a"));
+    },
+  );
+
+  app.get<{ Querystring: { n?: number } }>(
+    "/links/fan-out",
+    { schema: { querystring: numbers({ n: [0, MAX_FAN_OUT] }) } },
+    (request, reply) => {
+      const n = request.query.n ?? 10;
+      return reply.type("text/html").send(linkFanOutHtml(n));
     },
   );
 
