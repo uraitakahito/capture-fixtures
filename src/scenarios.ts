@@ -104,6 +104,93 @@ export const scenarios = {
    */
   blockMainThread: (holdMs: number, repeatForMs: number): string =>
     `/block-main-thread?holdMs=${String(holdMs)}&repeatForMs=${String(repeatForMs)}`,
+  /**
+   * Three same-origin links to {@link scenarios.linkLeaf} — the crawl baseline.
+   *
+   * Every other link scenario is this page with exactly one thing changed, so a
+   * crawler that follows the wrong set can be told apart from one that is simply
+   * broken. Also links to {@link scenarios.linkHidden}, which
+   * {@link scenarios.robotsTxt} forbids: a crawler that honours robots reaches
+   * this page and still never fetches that one.
+   */
+  linkHub: "/links/hub",
+  /**
+   * A page with no outbound links — where a crawl's depth stops.
+   *
+   * `id` only changes the URL. Distinct URLs are what a depth or page budget is
+   * counted in, so a fixture that needs "three more pages" needs three ids.
+   */
+  linkLeaf: (id: number): string => `/links/leaf/${String(id)}`,
+  /**
+   * {@link scenarios.linkHub} with `rel="nofollow"` on the third link.
+   *
+   * The first two are the control: a crawler that follows none of them is not
+   * honouring `nofollow`, it is failing to parse the page.
+   */
+  linkNofollow: "/links/nofollow",
+  /**
+   * Links that leave the origin — a different host, a different port, and a
+   * different scheme, plus one same-origin control.
+   *
+   * The foreign host is under `.invalid` (RFC 2606), which is guaranteed never
+   * to resolve. A crawler that wrongly follows it fails against a name that
+   * cannot exist rather than reaching a stranger's server.
+   */
+  linkOffOrigin: "/links/off-origin",
+  /**
+   * The same leaf twice, once with `#a` — one resource, two spellings.
+   *
+   * A crawler that does not drop the fragment captures the same page twice and
+   * still looks like it worked.
+   */
+  linkFragments: "/links/fragments",
+  /**
+   * Three links that exist only after `DOMContentLoaded` builds them.
+   *
+   * Nothing in the served HTML matches `<a`. A consumer reading the response
+   * body finds no links at all; one reading the rendered DOM finds three.
+   */
+  linkJs: "/links/js",
+  /**
+   * One link appended `afterMs` after load — measures where a consumer stops
+   * looking.
+   *
+   * A `setTimeout`, deliberately, not an `IntersectionObserver`: the point is a
+   * deadline the caller chose, not a callback that may be late. Pass a small
+   * `afterMs` to assert the link IS followed, a large one to find the boundary.
+   */
+  linkJsLate: (afterMs: number): string => `/links/js-late?afterMs=${String(afterMs)}`,
+  /**
+   * Two pages linking to each other — `a` ⇄ `b`.
+   *
+   * A crawler without dedupe walks this until some other limit stops it, and
+   * then reports that limit as the reason it stopped. Nothing about the run
+   * looks wrong.
+   */
+  linkCycle: (side: "a" | "b"): string => `/links/cycle/${side}`,
+  /**
+   * `n` same-origin links on one page — for exercising a page budget.
+   *
+   * The one generated scenario here. Budgets are the only link behaviour that
+   * needs more pages than a reader would want to see written out.
+   */
+  linkFanOut: (n: number): string => `/links/fan-out?n=${String(n)}`,
+  /** Reachable, linked from {@link scenarios.linkHub}, and forbidden by {@link scenarios.robotsTxt}. */
+  linkHidden: "/links/hidden",
+  /**
+   * `Disallow: /links/hidden` and `Crawl-delay: 3`. The only robots policy here.
+   *
+   * Fixed rather than parameterised, because a crawler fetches `/robots.txt`
+   * with no query string — a knob could never reach it. Tests assert against
+   * these two values.
+   *
+   * The delay is 3s so that it can be seen to win: a consumer whose own spacing
+   * is shorter must end up waiting 3s between requests, and a consumer that
+   * ignores robots keeps its own. A value below the consumer's default would be
+   * indistinguishable from being ignored.
+   */
+  robotsTxt: "/robots.txt",
+
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */
   asset: (path: string): string => `/assets/${path}`,
 } as const;

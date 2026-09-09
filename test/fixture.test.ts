@@ -400,6 +400,114 @@ describe("static assets", () => {
  * the worst thing a fixture can do, so each knob now has a range and anything
  * outside it is a 400 before the handler runs.
  */
+describe("link scenarios", () => {
+  let app: ReturnType<typeof buildFixture>;
+
+  beforeEach(() => {
+    app = buildFixture();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it("/links/hub links to three leaves and to the page robots forbids", async () => {
+    const res = await fetchOk(app, "/links/hub");
+
+    // The baseline every other link page is a variation of.
+    for (const id of [1, 2, 3]) {
+      expect(res.body).toContain(`href="/links/leaf/${String(id)}"`);
+    }
+    // Linked on purpose: a crawler has to reach the page, see this, and still
+    // not fetch it. A hidden page nobody links to proves nothing.
+    expect(res.body).toContain('href="/links/hidden"');
+  });
+
+  it("/links/nofollow marks only the third link", async () => {
+    const res = await fetchOk(app, "/links/nofollow");
+
+    // Two unmarked links are the control. Without them, a crawler that failed
+    // to parse the page would be indistinguishable from one honouring nofollow.
+    expect(res.body).toContain('href="/links/leaf/1">');
+    expect(res.body).toContain('href="/links/leaf/2">');
+    expect(res.body).toContain('href="/links/leaf/3" rel="nofollow"');
+    expect(res.body.match(/rel="nofollow"/g)).toHaveLength(1);
+  });
+
+  it("/links/off-origin leaves the origin by host, port and scheme", async () => {
+    const res = await fetchOk(app, "/links/off-origin");
+
+    // Same origin is scheme+host+port, so a crawler comparing only the host
+    // passes a host-only page while being wrong. All three are here.
+    expect(res.body).toContain('href="http://elsewhere.invalid/page"');
+    expect(res.body).toContain('href="http://localhost:9/page"');
+    expect(res.body).toContain('href="https://localhost:8080/page"');
+    // The control, so the page cannot pass for a crawler that follows nothing.
+    expect(res.body).toContain('href="/links/leaf/1"');
+  });
+
+  it("/links/fragments spells one resource two ways", async () => {
+    const res = await fetchOk(app, "/links/fragments");
+    expect(res.body).toContain('href="/links/leaf/1"');
+    expect(res.body).toContain('href="/links/leaf/1#a"');
+  });
+
+  it("/links/js serves no anchor at all — the links are built by script", async () => {
+    const res = await fetchOk(app, "/links/js");
+
+    // The whole point. A consumer reading the response body finds nothing; one
+    // reading the rendered DOM finds three. This assertion is what keeps the
+    // page able to tell those apart — an anchor slipping into the HTML would
+    // make it pass for both.
+    expect(res.body).not.toContain("<a ");
+    expect(res.body).toContain('createElement("a")');
+  });
+
+  it("/links/js-late puts the caller's deadline in the timer", async () => {
+    const res = await fetchOk(app, "/links/js-late?afterMs=250");
+    expect(res.body).not.toContain("<a ");
+    expect(res.body).toContain("}, 250);");
+    // A deadline the caller chose, not a callback that may be late.
+    expect(res.body).not.toContain("IntersectionObserver");
+  });
+
+  it("/links/cycle/:side points at the other side", async () => {
+    const a = await fetchOk(app, "/links/cycle/a");
+    expect(a.body).toContain('href="/links/cycle/b"');
+
+    const b = await fetchOk(app, "/links/cycle/b");
+    expect(b.body).toContain('href="/links/cycle/a"');
+  });
+
+  it("/links/fan-out serves exactly n links", async () => {
+    const res = await fetchOk(app, "/links/fan-out?n=7");
+    expect(res.body.match(/<a href=/g)).toHaveLength(7);
+  });
+
+  it("/links/leaf/:id is a dead end", async () => {
+    const res = await fetchOk(app, "/links/leaf/1");
+    // Depth has to stop somewhere, and this is where.
+    expect(res.body).not.toContain("<a ");
+  });
+
+  it("/robots.txt forbids the hidden page and asks for a delay that can be seen", async () => {
+    const res = await fetchOk(app, "/robots.txt");
+
+    expect(res.headers["content-type"]).toContain("text/plain");
+    expect(res.body).toContain("Disallow: /links/hidden");
+    // 3s, not 1s. A delay shorter than a consumer's own spacing is
+    // indistinguishable from being ignored — the consumer's value would
+    // dominate and the test would pass either way.
+    expect(res.body).toContain("Crawl-delay: 3");
+  });
+
+  it("/links/hidden is served — robots is the only thing keeping it out", async () => {
+    // If the page 404'd, a crawler that ignores robots would also fail to fetch
+    // it, and the scenario would pass for the wrong reason.
+    await fetchOk(app, "/links/hidden");
+  });
+});
+
 describe("malformed scenario parameters", () => {
   let app: ReturnType<typeof buildFixture>;
 
@@ -424,6 +532,13 @@ describe("malformed scenario parameters", () => {
     ["slow-body overMs not a number", "/slow-body?bytes=10&overMs=abc"],
     ["hops not a number", "/server-redirect-chain/abc"],
     ["failTimes not a number", "/fails-then-succeeds?failTimes=abc"],
+    ["afterMs not a number", "/links/js-late?afterMs=abc"],
+    ["afterMs over the ceiling", "/links/js-late?afterMs=999999"],
+    ["fan-out n not a number", "/links/fan-out?n=abc"],
+    ["fan-out n over the ceiling", "/links/fan-out?n=99999"],
+    ["leaf id not a number", "/links/leaf/abc"],
+    ["leaf id below the range", "/links/leaf/0"],
+    ["cycle side that is neither", "/links/cycle/c"],
   ])("rejects %s", async (_name, url) => {
     expect((await app.inject(url)).statusCode).toBe(400);
   });
@@ -437,6 +552,9 @@ describe("malformed scenario parameters", () => {
     ["/large-body?bytes=100", 200],
     ["/large-storage?bytes=2048", 200],
     ["/slow-body?bytes=10&overMs=0", 200],
+    ["/links/js-late?afterMs=0", 200],
+    ["/links/fan-out?n=0", 200],
+    ["/links/leaf/200", 200],
   ])("still serves %s", async (url, expected) => {
     expect((await app.inject(url)).statusCode).toBe(expected);
   });

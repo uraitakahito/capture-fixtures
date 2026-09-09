@@ -54,3 +54,37 @@ describe("values BrowserHive passes today", () => {
     expect((await app.inject(path)).statusCode, `${name} → ${path}`).not.toBe(400);
   });
 });
+
+/**
+ * The second consumer, added 2026-09-09.
+ *
+ * waggle vendors meadow directly (`.upstream/meadow`) rather than through
+ * BrowserHive, so its pin moves independently — and a bound tightened here
+ * reaches it on its own schedule. Same reason as the block above: a value that
+ * has become a 400 should say so in a unit test, not in a suite that needs
+ * containers, a browser and a Postgres.
+ *
+ * The crawl e2e seeds `/links/hub` and lets the crawler find the rest, so the
+ * values below are the ones it passes directly, not every page it visits.
+ */
+describe("values waggle's crawl e2e passes today", () => {
+  let app: ReturnType<typeof buildFixture>;
+
+  beforeEach(() => {
+    app = buildFixture();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it.each([
+    ["linkFanOut(50) — over waggle's default maxPages of 30", scenarios.linkFanOut(50)],
+    ["linkJsLate(250) — inside any settle window", scenarios.linkJsLate(250)],
+    ["linkJsLate(60000) — past every settle window", scenarios.linkJsLate(60_000)],
+    ["linkLeaf(1)", scenarios.linkLeaf(1)],
+    ["linkCycle a", scenarios.linkCycle("a")],
+  ])("%s is not refused", async (name, path) => {
+    expect((await app.inject(path)).statusCode, `${name} → ${path}`).not.toBe(400);
+  });
+});
