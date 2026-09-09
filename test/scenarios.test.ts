@@ -59,6 +59,10 @@ describe("every scenario reaches the fixture", () => {
     ["serverRedirectChain", scenarios.serverRedirectChain(2)],
     ["failsThenSucceeds", scenarios.failsThenSucceeds(1, "contract")],
     ["blockMainThread", scenarios.blockMainThread(10, 20)],
+    ["linkLeaf", scenarios.linkLeaf(1)],
+    ["linkJsLate", scenarios.linkJsLate(50)],
+    ["linkCycle", scenarios.linkCycle("a")],
+    ["linkFanOut", scenarios.linkFanOut(3)],
     ["asset", scenarios.asset("hero.svg")],
   ];
 
