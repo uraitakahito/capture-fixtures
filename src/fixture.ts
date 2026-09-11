@@ -21,7 +21,7 @@ const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</
  * contacting the origin at all, which reports as a 200 and proves nothing.
  */
 const CACHEABLE_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>cacheable</title></head><body><h1>cacheable</h1></body></html>`;
-const CACHEABLE_ETAG = '"meadow-cacheable-v1"';
+const CACHEABLE_ETAG = '"fixture-cacheable-v1"';
 
 const REDIRECT_TARGET_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>landed</title></head><body><h1>landed</h1></body></html>`;
 
@@ -147,12 +147,12 @@ const cookieAndStorageHtml = (cookieTag: string, nextTag: string): string =>
   // Adding a store means one more key here — and nothing at all in the consumer.
   var arrived = {
     cookie: ${JSON.stringify(cookieTag)},
-    local: localStorage.getItem("meadow") ?? "fresh",
-    session: sessionStorage.getItem("meadow") ?? "fresh"
+    local: localStorage.getItem("fixture-state") ?? "fresh",
+    session: sessionStorage.getItem("fixture-state") ?? "fresh"
   };
   document.getElementById("arrival").textContent = JSON.stringify(arrived);
-  localStorage.setItem("meadow", ${JSON.stringify(nextTag)});
-  sessionStorage.setItem("meadow", ${JSON.stringify(nextTag)});
+  localStorage.setItem("fixture-state", ${JSON.stringify(nextTag)});
+  sessionStorage.setItem("fixture-state", ${JSON.stringify(nextTag)});
 </script>
 </body></html>`;
 
@@ -644,9 +644,9 @@ export function buildFixture(): FastifyInstance {
 
   app.get<{ Querystring: { tag?: string } }>("/cookie-and-storage", (request, reply) => {
     const nextTag = request.query.tag ?? "notag";
-    const arrived = /(?:^|;\s*)meadow=([A-Za-z0-9]+)/.exec(request.headers.cookie ?? "");
+    const arrived = /(?:^|;\s*)fixture-state=([A-Za-z0-9]+)/.exec(request.headers.cookie ?? "");
     return reply
-      .header("set-cookie", `meadow=${nextTag}; Path=/; HttpOnly`)
+      .header("set-cookie", `fixture-state=${nextTag}; Path=/; HttpOnly`)
       .type("text/html")
       .send(cookieAndStorageHtml(arrived?.[1] ?? "fresh", nextTag));
   });

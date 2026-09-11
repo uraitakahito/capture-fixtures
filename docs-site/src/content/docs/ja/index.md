@@ -1,9 +1,9 @@
 ---
-title: meadow
+title: capture-fixtures
 description: BrowserHive と waggle の統合テストで Chrome が訪れる「合成インターネット」— 失敗を決定論的に再現する Fastify のフィクスチャオリジン
 ---
 
-meadow は、BrowserHive と
+capture-fixtures は、BrowserHive と
 [waggle](https://uraitakahito.github.io/waggle/ja/) の統合テストで
 **インターネットの役を演じる**小さな Fastify サーバです。
 
@@ -22,14 +22,14 @@ meadow は、BrowserHive と
 - **実在のサイトはネットワークを要求します。** 外向き通信の無い CI や回線の細い CI では、
   正しさのテストが不安定さの生成器に変わります。
 
-meadow はこの 3 つを取り除きます。**それぞれが 1 つの挙動だけを引き起こすように作られたページ**を、
+capture-fixtures はこの 3 つを取り除きます。**それぞれが 1 つの挙動だけを引き起こすように作られたページ**を、
 呼ばれたときに、ブラウザと同じネットワークの中から返します。
 
 ## 同じ中身、2 つの形
 
 `buildFixture()` が作るアプリは、どちらの形でも同じものです。
 
-**ライブラリとして** ― `import { buildFixture, scenarios } from "meadow"` して
+**ライブラリとして** ― `import { buildFixture, scenarios } from "capture-fixtures"` して
 `app.inject(...)` で叩きます。ソケットもポートも開かず、後始末は `app.close()` だけ。
 実ブラウザを必要としないものはこれで足ります。
 
@@ -38,9 +38,9 @@ IP や DNS 名で到達させます。**こちらが主経路**です。
 多くのシナリオの要点は「*実ブラウザ*がそれをどう扱うか」であり、
 実ブラウザには実の HTTP オリジンが必要だからです。
 
-## meadow ではないもの
+## capture-fixtures ではないもの
 
-meadow は**モックではありません**。リクエストを横取りしたりレスポンスをスタブしたりせず、
+capture-fixtures は**モックではありません**。リクエストを横取りしたりレスポンスをスタブしたりせず、
 **実際にバイトを送り、実際に遅延させ、実際にステータスコードを返す**ただの HTTP サーバです。
 これは意図的で、ネットワーク層でスタブすると
 **Chrome 自身の挙動を飛ばしてしまいます** ― それこそがテストしたいものです。

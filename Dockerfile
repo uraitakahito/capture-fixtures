@@ -1,4 +1,4 @@
-# meadow — fixture-origin container.
+# capture-fixtures — fixture-origin container.
 # Multi-stage: build TypeScript in a full image, ship only prod deps + dist + site.
 
 FROM node:26-bookworm-slim AS build
@@ -34,7 +34,7 @@ RUN pnpm run build
 # The production tree, built in a stage of its own from nothing.
 #
 # Not `pnpm deploy`, which BrowserHive uses: that selects a project out of a
-# workspace, and meadow's pnpm-workspace.yaml declares no packages — it exists
+# workspace, and capture-fixtures's pnpm-workspace.yaml declares no packages — it exists
 # only for allowBuilds and enablePrePostScripts, so `deploy` stops with
 # ERR_PNPM_NOTHING_TO_DEPLOY.
 #

@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Run meadow as an in-process library or as a container, and reach it from a browser in another VM
+description: Run capture-fixtures as an in-process library or as a container, and reach it from a browser in another VM
 ---
 
 Two ways to run the same server. Which one you want depends on whether a **real
@@ -13,7 +13,7 @@ the app in-process — no socket is opened, so there is no port to allocate and
 nothing to clean up but the app itself.
 
 ```ts
-import { buildFixture, scenarios } from "meadow";
+import { buildFixture, scenarios } from "capture-fixtures";
 
 const app = buildFixture();
 
@@ -34,20 +34,20 @@ scenario is about what the *browser* does — `/lazy-images`, `/client-side-redi
 
 ## As a container
 
-The primary path. A capture worker's Chrome runs in its own VM, so meadow has
+The primary path. A capture worker's Chrome runs in its own VM, so capture-fixtures has
 to be reachable over the network by IP or DNS name.
 
 ```sh
-container build -t meadow .
-container run -d --name meadow meadow
+container build -t capture-fixtures .
+container run -d --name capture-fixtures capture-fixtures
 
 # Find the address, then check it is up
 container ls
-curl -sf http://<meadow-ip>:8080/health
+curl -sf http://<capture-fixtures-ip>:8080/health
 ```
 
 Under Apple Container with a project DNS domain, consumers reach it by name
-instead — BrowserHive's stack runs it as `meadow.browserhive:8080`.
+instead — BrowserHive's stack runs it as `capture-fixtures.browserhive:8080`.
 
 ### Configuration
 
@@ -56,8 +56,8 @@ Two environment variables, read once at startup by the container entrypoint
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `MEADOW_PORT` | `8080` | Port to listen on |
-| `MEADOW_HOST` | `0.0.0.0` | Binds all interfaces so another VM can reach it |
+| `CAPTURE_FIXTURES_PORT` | `8080` | Port to listen on |
+| `CAPTURE_FIXTURES_HOST` | `0.0.0.0` | Binds all interfaces so another VM can reach it |
 
 `0.0.0.0` is the point of the default: binding loopback would make the container
 unreachable from the browser VM, which is the whole reason the container exists.
@@ -68,21 +68,21 @@ If you do need to, pass them the way you pass any environment variable.
 
 ```sh
 # container / docker
-container run -d --name meadow -e MEADOW_PORT=9090 meadow
+container run -d --name capture-fixtures -e CAPTURE_FIXTURES_PORT=9090 capture-fixtures
 ```
 
 ```yaml
 # compose
 services:
-  meadow:
-    build: ./meadow
+  capture-fixtures:
+    build: ./capture-fixtures
     environment:
-      MEADOW_PORT: "9090"
+      CAPTURE_FIXTURES_PORT: "9090"
 ```
 
 ```sh
 # straight from a checkout, no container
-pnpm run build && MEADOW_PORT=9090 pnpm start
+pnpm run build && CAPTURE_FIXTURES_PORT=9090 pnpm start
 ```
 
 **As a library, these are ignored.** `buildFixture()` returns an unstarted
@@ -95,7 +95,7 @@ a socket, pass what you want to `app.listen()` yourself.
 There is no readiness signal beyond the server answering, so poll `/health`:
 
 ```sh
-until curl -sf "http://${MEADOW_IP}:8080/health" >/dev/null; do sleep 1; done
+until curl -sf "http://${CAPTURE_FIXTURES_IP}:8080/health" >/dev/null; do sleep 1; done
 ```
 
 Consumers do this in their integration-test setup rather than assuming the
@@ -107,7 +107,7 @@ is listening.
 The shape most consumer tests take:
 
 ```ts
-import { scenarios } from "meadow";
+import { scenarios } from "capture-fixtures";
 
 const origin = `http://${meadowIp}:8080`;
 
@@ -132,9 +132,9 @@ matters.
 
 ## Keeping these tests out of the default run
 
-The test above fails the moment meadow is not running. **Do not leave that kind
+The test above fails the moment capture-fixtures is not running. **Do not leave that kind
 of test in the default test command.** If you do, every change to anything —
-including code that has nothing to do with meadow — starts requiring a
+including code that has nothing to do with capture-fixtures — starts requiring a
 container.
 
 Split them into their own test-runner project instead. Consumers use two:
@@ -148,7 +148,7 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["test/**/*.test.ts"],
-          exclude: ["test/e2e/**"], // everything that needs meadow lives here
+          exclude: ["test/e2e/**"], // everything that needs capture-fixtures lives here
         },
       },
       {
@@ -174,12 +174,12 @@ Then point the default command at only one of them:
 "test:e2e": "vitest run --project e2e"
 ```
 
-Now `npm test` does not *skip* the meadow tests — it never collects them. There
+Now `npm test` does not *skip* the capture-fixtures tests — it never collects them. There
 is no "0 skipped" line to misread, and no container to remember.
 
 ### Fail, do not skip
 
-When the `e2e` project **is** selected and meadow is not up, fail:
+When the `e2e` project **is** selected and capture-fixtures is not up, fail:
 
 ```ts
 // test/e2e/global-setup.ts
@@ -193,18 +193,18 @@ for (let i = 0; i < READY_ATTEMPTS && !reachable; i++) {
   if (!reachable) await new Promise((r) => setTimeout(r, 1000));
 }
 if (!reachable) {
-  throw new Error(`meadow not reachable at ${origin} after 45s — start it first`);
+  throw new Error(`capture-fixtures not reachable at ${origin} after 45s — start it first`);
 }
 ```
 
 `it.skipIf()` is easier and worse. **A skipped test is not a passing test**, but
-it reports as green — so a CI job that forgets to start meadow keeps reporting
+it reports as green — so a CI job that forgets to start capture-fixtures keeps reporting
 success while verifying nothing. Do the separating when the suite is *chosen*,
 and once chosen, always produce a result.
 
 ### CI
 
-Run `unit` on every pull request and leave the meadow suite on manual dispatch.
+Run `unit` on every pull request and leave the capture-fixtures suite on manual dispatch.
 There is no reason for day-to-day CI to start a container.
 
 BrowserHive's own "Running the tests" page is this arrangement written out in

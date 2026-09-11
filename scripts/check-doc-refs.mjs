@@ -5,7 +5,7 @@
  * in docs-site/src/lib/extract.ts does throw on a missing `// #region`, but
  * whether that stops the build depends on the page's extension: on .mdx the
  * throw surfaces through vite and the build fails; on .md — which is every
- * page in meadow — Starlight's docs loader catches it, logs
+ * page in capture-fixtures — Starlight's docs loader catches it, logs
  * `[ERROR] [starlight-docs-loader] Error rendering …`, and finishes with
  * exit 0. So `astro build` alone goes green over a doc pointing at code that
  * no longer exists. Measured, not assumed.
@@ -21,7 +21,7 @@
  * scenarios-v2` and serve the wrong snippet.
  *
  * BrowserHive's version of this script also validates `/terminology/#g-<Term>`
- * links against `@glossary` tags. meadow has no glossary page, so that check
+ * links against `@glossary` tags. capture-fixtures has no glossary page, so that check
  * would have nothing to validate — and a check with zero subjects is worse than
  * no check, because it is permanently green and reads as coverage.
  *

@@ -1,6 +1,6 @@
 ---
 title: クイックスタート
-description: meadow をライブラリとして、またはコンテナとして動かし、別 VM のブラウザから到達させる
+description: capture-fixtures をライブラリとして、またはコンテナとして動かし、別 VM のブラウザから到達させる
 ---
 
 同じサーバを動かす方法が 2 つあります。
@@ -13,7 +13,7 @@ description: meadow をライブラリとして、またはコンテナとして
 **ソケットを開かず**、ポートの確保も要らず、後始末はアプリを閉じるだけです。
 
 ```ts
-import { buildFixture, scenarios } from "meadow";
+import { buildFixture, scenarios } from "capture-fixtures";
 
 const app = buildFixture();
 
@@ -36,19 +36,19 @@ await app.close();
 ## コンテナとして
 
 主経路です。キャプチャワーカーの Chrome は自分の VM で動くため、
-meadow にはネットワーク越しに IP か DNS 名で到達できる必要があります。
+capture-fixtures にはネットワーク越しに IP か DNS 名で到達できる必要があります。
 
 ```sh
-container build -t meadow .
-container run -d --name meadow meadow
+container build -t capture-fixtures .
+container run -d --name capture-fixtures capture-fixtures
 
 # アドレスを調べて、起動を確認する
 container ls
-curl -sf http://<meadow-ip>:8080/health
+curl -sf http://<capture-fixtures-ip>:8080/health
 ```
 
 Apple Container でプロジェクト DNS ドメインを使っている場合は名前で届きます ―
-BrowserHive のスタックでは `meadow.browserhive:8080` です。
+BrowserHive のスタックでは `capture-fixtures.browserhive:8080` です。
 
 ### 設定
 
@@ -57,8 +57,8 @@ BrowserHive のスタックでは `meadow.browserhive:8080` です。
 
 | 変数 | 既定値 | 備考 |
 | --- | --- | --- |
-| `MEADOW_PORT` | `8080` | 待ち受けポート |
-| `MEADOW_HOST` | `0.0.0.0` | 別 VM から届くよう全インターフェースにバインド |
+| `CAPTURE_FIXTURES_PORT` | `8080` | 待ち受けポート |
+| `CAPTURE_FIXTURES_HOST` | `0.0.0.0` | 別 VM から届くよう全インターフェースにバインド |
 
 `0.0.0.0` という既定値こそが要点です。
 ループバックにバインドしてしまうと**ブラウザの VM から到達できなくなり**、
@@ -69,21 +69,21 @@ BrowserHive のスタックでは `meadow.browserhive:8080` です。
 
 ```sh
 # container / docker
-container run -d --name meadow -e MEADOW_PORT=9090 meadow
+container run -d --name capture-fixtures -e CAPTURE_FIXTURES_PORT=9090 capture-fixtures
 ```
 
 ```yaml
 # compose
 services:
-  meadow:
-    build: ./meadow
+  capture-fixtures:
+    build: ./capture-fixtures
     environment:
-      MEADOW_PORT: "9090"
+      CAPTURE_FIXTURES_PORT: "9090"
 ```
 
 ```sh
 # チェックアウトから直接、コンテナなしで
-pnpm run build && MEADOW_PORT=9090 pnpm start
+pnpm run build && CAPTURE_FIXTURES_PORT=9090 pnpm start
 ```
 
 **ライブラリとして使う場合、これらは読まれません。** `buildFixture()` は
@@ -97,7 +97,7 @@ pnpm run build && MEADOW_PORT=9090 pnpm start
 サーバが応答すること以外に準備完了の合図は無いので、`/health` をポーリングします。
 
 ```sh
-until curl -sf "http://${MEADOW_IP}:8080/health" >/dev/null; do sleep 1; done
+until curl -sf "http://${CAPTURE_FIXTURES_IP}:8080/health" >/dev/null; do sleep 1; done
 ```
 
 利用側は統合テストのセットアップでこれを行っています。
@@ -108,7 +108,7 @@ until curl -sf "http://${MEADOW_IP}:8080/health" >/dev/null; do sleep 1; done
 利用側のテストが取る典型的な形です。
 
 ```ts
-import { scenarios } from "meadow";
+import { scenarios } from "capture-fixtures";
 
 const origin = `http://${meadowIp}:8080`;
 
@@ -133,9 +133,9 @@ it("失敗するオリジンに対してリトライし、最終的に成功す�
 
 ## 既定の実行から外す
 
-前節のテストは、meadow が動いていなければ即座に失敗します。
+前節のテストは、capture-fixtures が動いていなければ即座に失敗します。
 **この種のテストを既定のテストコマンドに残さないでください。**
-残すと、meadow と何の関係もないコードを触ったときまで、
+残すと、capture-fixtures と何の関係もないコードを触ったときまで、
 コンテナの起動を強いられることになります。
 
 テストランナーのプロジェクトを分けます。利用側は 2 つ持っています。
@@ -149,7 +149,7 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["test/**/*.test.ts"],
-          exclude: ["test/e2e/**"], // meadow を要求するものはここに集める
+          exclude: ["test/e2e/**"], // capture-fixtures を要求するものはここに集める
         },
       },
       {
@@ -175,12 +175,12 @@ export default defineConfig({
 "test:e2e": "vitest run --project e2e"
 ```
 
-これで `npm test` は meadow 関連を*スキップする*のではなく、**そもそも収集しません**。
+これで `npm test` は capture-fixtures 関連を*スキップする*のではなく、**そもそも収集しません**。
 「0 skipped」を読み違える余地も、コンテナを起動し忘れる余地もありません。
 
 ### スキップではなく、失敗させる
 
-`e2e` を**選んだ**のに meadow が動いていない場合は、失敗させます。
+`e2e` を**選んだ**のに capture-fixtures が動いていない場合は、失敗させます。
 
 ```ts
 // test/e2e/global-setup.ts
@@ -194,18 +194,18 @@ for (let i = 0; i < READY_ATTEMPTS && !reachable; i++) {
   if (!reachable) await new Promise((r) => setTimeout(r, 1000));
 }
 if (!reachable) {
-  throw new Error(`meadow not reachable at ${origin} after 45s — start it first`);
+  throw new Error(`capture-fixtures not reachable at ${origin} after 45s — start it first`);
 }
 ```
 
 `it.skipIf()` のほうが手軽ですが、そのぶん質が落ちます。
 **スキップしたテストは「通ったテスト」ではありません。** それでもレポートは緑です。
-meadow の起動を忘れた CI が、何も検証しないまま成功を報告し続けます。
+capture-fixtures の起動を忘れた CI が、何も検証しないまま成功を報告し続けます。
 分離は**選ぶ**段階で行い、選んだ後は必ず結果を出します。
 
 ### CI
 
-プルリクエストごとに回すのは `unit` だけにして、meadow を使うスイートは
+プルリクエストごとに回すのは `unit` だけにして、capture-fixtures を使うスイートは
 手動起動にしておきます。日常の CI がコンテナを起動する理由はありません。
 
 BrowserHive 側の「テストの実行」に、この構成が余さず書かれています ―

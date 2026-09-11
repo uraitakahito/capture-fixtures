@@ -33,18 +33,18 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
-          tags: meadow:smoke
+          tags: capture-fixtures:smoke
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Start container
-        run: docker run -d --rm --name smoke -p 8080:8080 meadow:smoke
+        run: docker run -d --rm --name smoke -p 8080:8080 capture-fixtures:smoke
 
       - name: Wait for readiness and probe scenarios
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8080/health >/dev/null; then
-              echo "meadow is up after ${i}s"
+              echo "capture-fixtures is up after ${i}s"
               break
             fi
             sleep 1

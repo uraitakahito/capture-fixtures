@@ -1,6 +1,6 @@
 ---
 title: 開発
-description: meadow のビルドとテスト、利用側からの submodule としての参照、シナリオを足すときに気をつけること
+description: capture-fixtures のビルドとテスト、利用側からの submodule としての参照、シナリオを足すときに気をつけること
 ---
 
 ## コマンド
@@ -16,17 +16,17 @@ CI が回すのは `pnpm run check` です。
 
 ## 利用側からの使われ方
 
-meadow は BrowserHive と waggle の両方で **git submodule** として参照されており、
+capture-fixtures は BrowserHive と waggle の両方で **git submodule** として参照されており、
 npm の依存ではありません。それぞれが特定のコミットを固定しているので、
 ここでの変更は**利用側がポインタを意図的に進めるまで届きません**。
 
-これには知っておくべき帰結があります。meadow の `package.json` には
+これには知っておくべき帰結があります。capture-fixtures の `package.json` には
 **`prepare` スクリプトがありません**。
 かつては install 時にビルドして利用側が `dist/` をただで得られるようにしていましたが、
 submodule はソースがビルドされないままチェックアウトされ、
 しかも `prepare` が **`tsc` の無い状況で発火**しました
 ― 開発依存を落とした Docker のビルドステージが典型例です。
-現在は利用側が自分のビルドの一部として meadow を明示的にビルドします。
+現在は利用側が自分のビルドの一部として capture-fixtures を明示的にビルドします。
 
 ## シナリオを足す
 
@@ -85,8 +85,8 @@ pnpm run site:check   # ビルド + 参照がすべて解決することを検�
 ## コンテナ
 
 ```sh
-container build -t meadow .
-container run -d --name meadow meadow
+container build -t capture-fixtures .
+container run -d --name capture-fixtures capture-fixtures
 ```
 
 Dockerfile は 3 ステージです。TypeScript はフルイメージでコンパイルし、

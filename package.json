@@ -1,5 +1,5 @@
 {
-  "name": "meadow",
+  "name": "capture-fixtures",
   "version": "0.1.0",
   "description": "Shared Fastify fixture-origin — the synthetic internet that Chrome visits in BrowserHive and waggle integration tests.",
   "type": "module",
