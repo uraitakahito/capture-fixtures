@@ -40,7 +40,7 @@ RUN pnpm run build
 #
 # Nor `pnpm install --prod` on top of the build stage: pruning rewrites a
 # node_modules holding the whole dev tree, and committing that layer wedged
-# capping's builder for twenty minutes with the install itself reporting
+# wacz-signer's builder for twenty minutes with the install itself reporting
 # "Done in 267ms". Installing into an empty stage writes the two runtime
 # packages and nothing else.
 #

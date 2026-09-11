@@ -16,7 +16,7 @@ CI が回すのは `pnpm run check` です。
 
 ## 利用側からの使われ方
 
-capture-fixtures は BrowserHive と waggle の両方で **git submodule** として参照されており、
+capture-fixtures は BrowserHive と capture-ledger の両方で **git submodule** として参照されており、
 npm の依存ではありません。それぞれが特定のコミットを固定しているので、
 ここでの変更は**利用側がポインタを意図的に進めるまで届きません**。
 

@@ -1,7 +1,7 @@
 {
   "name": "capture-fixtures",
   "version": "0.1.0",
-  "description": "Shared Fastify fixture-origin — the synthetic internet that Chrome visits in BrowserHive and waggle integration tests.",
+  "description": "Shared Fastify fixture-origin — the synthetic internet that Chrome visits in BrowserHive and capture-ledger integration tests.",
   "type": "module",
   "exports": {
     ".": {
@@ -37,7 +37,7 @@
     "fixture",
     "test",
     "browserhive",
-    "waggle"
+    "capture-ledger"
   ],
   "author": "Takahito Urai",
   "license": "The Unlicense",

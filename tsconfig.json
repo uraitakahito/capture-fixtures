@@ -29,7 +29,7 @@
      *
      * NodeNext (rather than BrowserHive's `ESNext` + `moduleResolution: Bundler`)
      * because capture-fixtures is a Node service run directly via `node dist/serve.js`,
-     * not through a bundler — same choice waggle makes.
+     * not through a bundler — same choice capture-ledger makes.
      */
     "module": "NodeNext",
     "moduleResolution": "NodeNext",

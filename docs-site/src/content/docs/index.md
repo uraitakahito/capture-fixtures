@@ -1,11 +1,11 @@
 ---
 title: capture-fixtures
-description: The synthetic internet that Chrome visits in BrowserHive and waggle integration tests — a Fastify fixture-origin with deterministic failure modes
+description: The synthetic internet that Chrome visits in BrowserHive and capture-ledger integration tests — a Fastify fixture-origin with deterministic failure modes
 ---
 
 capture-fixtures is a small Fastify server that plays the part of **the internet** in
 BrowserHive and
-[waggle](https://uraitakahito.github.io/waggle/) integration tests.
+[capture-ledger](https://uraitakahito.github.io/capture-ledger/) integration tests.
 
 ## Why a fixture-origin exists
 
