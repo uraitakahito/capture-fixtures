@@ -1,6 +1,6 @@
 ---
 title: Scenarios
-description: Every route meadow serves, what it returns, and the failure mode each one exists to reproduce
+description: Every route capture-fixtures serves, what it returns, and the failure mode each one exists to reproduce
 ---
 
 Each route exists to make **one specific thing** happen on demand. This page is
@@ -8,7 +8,7 @@ the reason each one is there — the part a table of paths cannot carry.
 
 ## Use the typed helper, not the paths
 
-Hard-coding `/fails-then-succeeds?failTimes=2&key=x` in a consumer means a rename in meadow breaks
+Hard-coding `/fails-then-succeeds?failTimes=2&key=x` in a consumer means a rename in capture-fixtures breaks
 that consumer silently, months later, in a repo nobody is looking at. The
 `scenarios` export is the one place these URLs are written down:
 
@@ -18,7 +18,7 @@ that consumer silently, months later, in a repo nobody is looking at. The
 Prefix with the fixture origin:
 
 ```ts
-import { scenarios } from "meadow";
+import { scenarios } from "capture-fixtures";
 
 const url = `http://${meadowIp}:8080` + scenarios.failsThenSucceeds(2, "retry-budget");
 ```
@@ -131,7 +131,7 @@ did.
 
 ### `/cookie-and-storage` — state that outlives a page
 
-Sets `meadow=<tag>` as an HttpOnly cookie **and** writes the same tag to both
+Sets `capture-fixtures=<tag>` as an HttpOnly cookie **and** writes the same tag to both
 `localStorage` and `sessionStorage`. The page reports what *arrived* before
 overwriting it, so a consumer reads the previous capture's state rather than
 its own.
@@ -419,7 +419,7 @@ Returns `{ "ok": true }`. Not part of `scenarios` — it is for waiting on the
 container during startup, not for a test to assert on.
 
 ```sh
-until curl -sf "http://${MEADOW_IP}:8080/health" >/dev/null; do sleep 1; done
+until curl -sf "http://${CAPTURE_FIXTURES_IP}:8080/health" >/dev/null; do sleep 1; done
 ```
 
 ### `GET /__version`
@@ -431,7 +431,7 @@ Which build is answering.
 ```
 
 Separate from `/health` on purpose. That route answers *are you up*, asked in a
-tight loop by readiness waits; this one answers *which meadow is this*, asked
+tight loop by readiness waits; this one answers *which capture-fixtures is this*, asked
 when a test fails for no visible reason and you start wondering whether the
 container in front of you was ever rebuilt.
 
@@ -441,9 +441,9 @@ changes with every commit, and comparing it against the submodule your consumer
 pins is what catches a container you forgot to rebuild:
 
 ```sh
-running=$(curl -s "http://${MEADOW_IP}:8080/__version" | jq -r .revision)
-pinned=$(git -C meadow rev-parse --short HEAD)
-[ "$running" = "$pinned" ] || echo "meadow is stale: $running vs $pinned"
+running=$(curl -s "http://${CAPTURE_FIXTURES_IP}:8080/__version" | jq -r .revision)
+pinned=$(git -C capture-fixtures rev-parse --short HEAD)
+[ "$running" = "$pinned" ] || echo "capture-fixtures is stale: $running vs $pinned"
 ```
 
 `version` reads `unknown` and `revision` reads `dev` when the image was built

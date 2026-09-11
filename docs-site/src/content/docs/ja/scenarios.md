@@ -1,6 +1,6 @@
 ---
 title: シナリオ
-description: meadow が提供する全ルートと、それぞれが何を返し、どの失敗を再現するために存在するのか
+description: capture-fixtures が提供する全ルートと、それぞれが何を返し、どの失敗を再現するために存在するのか
 ---
 
 各ルートは**特定の 1 つのことを起こす**ために存在します。
@@ -8,7 +8,7 @@ description: meadow が提供する全ルートと、それぞれが何を返し
 
 ## パスを直書きせず、型付きヘルパーを使う
 
-利用側で `/fails-then-succeeds?failTimes=2&key=x` を直書きすると、meadow 側の変更が
+利用側で `/fails-then-succeeds?failTimes=2&key=x` を直書きすると、capture-fixtures 側の変更が
 **数か月後に、誰も見ていないリポジトリで、静かに**その利用側を壊します。
 `scenarios` エクスポートが、これらの URL が書かれている唯一の場所です。
 
@@ -18,7 +18,7 @@ description: meadow が提供する全ルートと、それぞれが何を返し
 オリジンを前置して使います。
 
 ```ts
-import { scenarios } from "meadow";
+import { scenarios } from "capture-fixtures";
 
 const url = `http://${meadowIp}:8080` + scenarios.failsThenSucceeds(2, "retry-budget");
 ```
@@ -126,7 +126,7 @@ BrowserHive の `autofetch` behavior が防ごうとしているのはこの失�
 
 ### `/cookie-and-storage` ― ページをまたいで残る状態
 
-HttpOnly クッキー `meadow=<tag>` を設定し、**同時に** `localStorage` と
+HttpOnly クッキー `capture-fixtures=<tag>` を設定し、**同時に** `localStorage` と
 `sessionStorage` の両方へ同じタグを書き込みます。ページは上書きする前に
 **届いていた値**を報告するので、利用側は自分が書いた値ではなく
 **前のキャプチャが残した状態**を読むことになります。
@@ -412,7 +412,7 @@ beforeEach(async () => {
 テストがアサートするものではなく、起動時にコンテナを待つためのものだからです。
 
 ```sh
-until curl -sf "http://${MEADOW_IP}:8080/health" >/dev/null; do sleep 1; done
+until curl -sf "http://${CAPTURE_FIXTURES_IP}:8080/health" >/dev/null; do sleep 1; done
 ```
 
 ### `GET /__version`
@@ -425,7 +425,7 @@ until curl -sf "http://${MEADOW_IP}:8080/health" >/dev/null; do sleep 1; done
 
 `/health` とは意図的に分けています。あちらは「生きているか」を問うもので、
 起動待ちのループから短い間隔で叩かれます。こちらが答えるのは「これはどの
-meadow か」― テストが理由の見えない落ち方をして、目の前のコンテナは
+capture-fixtures か」― テストが理由の見えない落ち方をして、目の前のコンテナは
 そもそも焼き直されたのか、と疑い始めたときに訊く問いです。
 
 **効くのは `revision` です。** タグはリリース時にしか動かないので、開発中は
@@ -434,9 +434,9 @@ meadow か」― テストが理由の見えない落ち方をして、目の前
 そこで捕まります。
 
 ```sh
-running=$(curl -s "http://${MEADOW_IP}:8080/__version" | jq -r .revision)
-pinned=$(git -C meadow rev-parse --short HEAD)
-[ "$running" = "$pinned" ] || echo "meadow が古い: $running vs $pinned"
+running=$(curl -s "http://${CAPTURE_FIXTURES_IP}:8080/__version" | jq -r .revision)
+pinned=$(git -C capture-fixtures rev-parse --short HEAD)
+[ "$running" = "$pinned" ] || echo "capture-fixtures が古い: $running vs $pinned"
 ```
 
 `GIT_TAG` / `GIT_REV` を渡さずに焼いたイメージは `version` が `unknown`、

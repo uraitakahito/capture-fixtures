@@ -7,9 +7,9 @@
 # 1 つだけ。推測ではなく実測で、allowBuilds を空にして install すると
 # ERR_PNPM_IGNORED_BUILDS が unrs-resolver だけを名指しして落ちる。
 #
-# 兄弟リポジトリ (capping / browserhive) は esbuild も並べているが meadow には
+# 兄弟リポジトリ (capping / browserhive) は esbuild も並べているが capture-fixtures には
 # 要らない。vitest 4 が使うバンドラは rolldown で、esbuild はこのツリーに
-# そもそも入っていない。capping は devDependencies が meadow と集合として同一
+# そもそも入っていない。capping は devDependencies が capture-fixtures と集合として同一
 # なのに lockfile には esbuild を持つので、**設定を写す前に確かめること**。
 #
 # 実行時依存の fastify / @fastify/static は install script を持たない。
@@ -17,7 +17,7 @@ allowBuilds:
   unrs-resolver: true
 
 # npm は pre<script> / post<script> を自動実行するが、pnpm は既定でしない。
-# meadow は prebuild / pretypecheck / pretest / prelint の 4 つを持ち、どれも
+# capture-fixtures は prebuild / pretypecheck / pretest / prelint の 4 つを持ち、どれも
 # generate:version を呼ぶ。
 #
 # 欠けたときの壊れ方が tree の状態で変わるのが厄介で、clean checkout なら

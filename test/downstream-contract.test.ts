@@ -6,7 +6,7 @@ import { scenarios } from "../src/scenarios.js";
 /**
  * The arguments BrowserHive's E2E suite actually passes.
  *
- * meadow is consumed as a pinned git submodule, so a release here reaches
+ * capture-fixtures is consumed as a pinned git submodule, so a release here reaches
  * nobody until someone bumps that pin. This suite is what makes the bump safe:
  * if a bound added to `fixture.ts` is too tight for a real caller, it goes red
  * here — in a plain unit test — instead of in a suite that needs containers and
@@ -58,7 +58,7 @@ describe("values BrowserHive passes today", () => {
 /**
  * The second consumer, added 2026-09-09.
  *
- * waggle vendors meadow directly (`.upstream/meadow`) rather than through
+ * waggle vendors capture-fixtures directly (`.upstream/capture-fixtures`) rather than through
  * BrowserHive, so its pin moves independently — and a bound tightened here
  * reaches it on its own schedule. Same reason as the block above: a value that
  * has become a 400 should say so in a unit test, not in a suite that needs

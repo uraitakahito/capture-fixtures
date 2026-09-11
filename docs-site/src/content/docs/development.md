@@ -1,6 +1,6 @@
 ---
 title: Development
-description: Building and testing meadow, how consumers pin it as a submodule, and what to keep in mind when adding a scenario
+description: Building and testing capture-fixtures, how consumers pin it as a submodule, and what to keep in mind when adding a scenario
 ---
 
 ## Commands
@@ -16,16 +16,16 @@ from `dist/` — see below.
 
 ## How consumers use it
 
-meadow is a **git submodule** in both BrowserHive and waggle, not an npm
+capture-fixtures is a **git submodule** in both BrowserHive and waggle, not an npm
 dependency. Each pins a specific commit, so a change here does not reach a
 consumer until that consumer moves its pointer deliberately.
 
-That has a consequence worth knowing: meadow's `package.json` has **no
+That has a consequence worth knowing: capture-fixtures's `package.json` has **no
 `prepare` script**. It used to build on install so that a consumer got `dist/`
 for free, but a submodule is checked out without its sources being built, and
 `prepare` fired in contexts where `tsc` was not available — inside a Docker
 build stage where dev dependencies had been pruned, for one. Consumers now
-build meadow explicitly as part of their own build.
+build capture-fixtures explicitly as part of their own build.
 
 ## Adding a scenario
 
@@ -82,8 +82,8 @@ falls back to English, which reads as an oversight rather than a decision.
 ## Container
 
 ```sh
-container build -t meadow .
-container run -d --name meadow meadow
+container build -t capture-fixtures .
+container run -d --name capture-fixtures capture-fixtures
 ```
 
 The Dockerfile has three stages. TypeScript is compiled in a full image, the

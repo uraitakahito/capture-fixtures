@@ -1,4 +1,4 @@
-# meadow
+# capture-fixtures
 
 A shared Fastify **fixture-origin** — the synthetic internet that Chrome visits
 in [BrowserHive](https://github.com/uraitakahito/browserhive) and
@@ -12,12 +12,12 @@ origin on demand instead of hoping a real website obliges.
 Everything — quickstart (library and container), every scenario and the failure
 it reproduces, and development — lives on the docs site:
 
-- **English** — <https://uraitakahito.github.io/meadow/>
-- **日本語** — <https://uraitakahito.github.io/meadow/ja/>
+- **English** — <https://uraitakahito.github.io/capture-fixtures/>
+- **日本語** — <https://uraitakahito.github.io/capture-fixtures/ja/>
 
 ## Related Projects
 
-- [BrowserHive](https://github.com/uraitakahito/browserhive) — a web-capture server; meadow is what its E2E suite captures against (git submodule).
+- [BrowserHive](https://github.com/uraitakahito/browserhive) — a web-capture server; capture-fixtures is what its E2E suite captures against (git submodule).
 - [waggle](https://github.com/uraitakahito/waggle) — reads URLs from Postgres and drives BrowserHive.
 
 ## License
