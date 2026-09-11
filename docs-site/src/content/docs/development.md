@@ -16,7 +16,7 @@ from `dist/` — see below.
 
 ## How consumers use it
 
-capture-fixtures is a **git submodule** in both BrowserHive and waggle, not an npm
+capture-fixtures is a **git submodule** in both BrowserHive and capture-ledger, not an npm
 dependency. Each pins a specific commit, so a change here does not reach a
 consumer until that consumer moves its pointer deliberately.
 

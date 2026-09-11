@@ -58,7 +58,7 @@ describe("values BrowserHive passes today", () => {
 /**
  * The second consumer, added 2026-09-09.
  *
- * waggle vendors capture-fixtures directly (`.upstream/capture-fixtures`) rather than through
+ * capture-ledger vendors capture-fixtures directly (`.upstream/capture-fixtures`) rather than through
  * BrowserHive, so its pin moves independently — and a bound tightened here
  * reaches it on its own schedule. Same reason as the block above: a value that
  * has become a 400 should say so in a unit test, not in a suite that needs
@@ -67,7 +67,7 @@ describe("values BrowserHive passes today", () => {
  * The crawl e2e seeds `/links/hub` and lets the crawler find the rest, so the
  * values below are the ones it passes directly, not every page it visits.
  */
-describe("values waggle's crawl e2e passes today", () => {
+describe("values capture-ledger's crawl e2e passes today", () => {
   let app: ReturnType<typeof buildFixture>;
 
   beforeEach(() => {
@@ -79,7 +79,7 @@ describe("values waggle's crawl e2e passes today", () => {
   });
 
   it.each([
-    ["linkFanOut(50) — over waggle's default maxPages of 30", scenarios.linkFanOut(50)],
+    ["linkFanOut(50) — over capture-ledger's default maxPages of 30", scenarios.linkFanOut(50)],
     ["linkJsLate(250) — inside any settle window", scenarios.linkJsLate(250)],
     ["linkJsLate(60000) — past every settle window", scenarios.linkJsLate(60_000)],
     ["linkLeaf(1)", scenarios.linkLeaf(1)],
