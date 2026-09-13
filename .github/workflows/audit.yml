@@ -1,0 +1,36 @@
+name: audit
+
+# Known-vulnerability gate for both lockfiles: pnpm-lock.yaml (the fixtures app)
+# and docs-site/package-lock.json (npm — `pnpm audit` never reads it).
+#
+# Advisories are published independently of our pull requests, so this also runs
+# every day. On 2026-09-13 the docs-site lockfile carried a critical astro advisory
+# and vitest a moderate one: Dependabot alerts were open, fix PRs sat unmerged, and
+# nothing anywhere was red.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # No install step: both audits read the lockfiles, not node_modules.
+      - name: Audit both lockfiles
+        run: pnpm run audit
