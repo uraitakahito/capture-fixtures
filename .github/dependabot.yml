@@ -2,7 +2,10 @@
 #
 # Dependabot が読むのは **default branch (main) に置かれたこのファイル** だけ。
 # `target-branch` は「PR をどこへ出すか」を指すだけで、設定の置き場所ではない。
-# develop にだけ置いても効かないので、両方に同じものを入れてある。
+#
+# PR の宛先は main。develop は 2026-09 に main より 28 commits 遅れて止まり、開発は
+# main で続いている。宛先が develop のままだった間、version updates (#70 #71 #81) は
+# 誰も読まない枝に溜まり、security updates だけが main に来ていた (それも未マージ)。
 #
 # この repo は npm プロジェクトを 2 つ持つ:
 #   /            … npm  (pnpm-lock.yaml — ecosystem 名は npm のままで pnpm の
@@ -15,7 +18,7 @@ updates:
   # ── アプリ本体 ──
   - package-ecosystem: npm
     directory: /
-    target-branch: develop
+    target-branch: main
     schedule:
       interval: weekly
       day: monday
@@ -52,7 +55,7 @@ updates:
   # ここを 3 にすると npm だけで 1 repo 最大 6 本になり、溜まる状態を再生産する。
   - package-ecosystem: npm
     directory: /docs-site
-    target-branch: develop
+    target-branch: main
     schedule:
       interval: weekly
       day: monday
@@ -72,7 +75,7 @@ updates:
   # ── GitHub Actions ──
   - package-ecosystem: github-actions
     directory: /
-    target-branch: develop
+    target-branch: main
     schedule:
       interval: weekly
       day: monday
@@ -90,7 +93,7 @@ updates:
   # ── Docker base image ──
   - package-ecosystem: docker
     directory: /
-    target-branch: develop
+    target-branch: main
     schedule:
       interval: weekly
       day: monday
