@@ -12,6 +12,9 @@ describe("scenarios URL contract", () => {
     expect(scenarios.serverRedirectChain(3)).toBe("/server-redirect-chain/3");
     expect(scenarios.largeBody(2048)).toBe("/large-body?bytes=2048");
     expect(scenarios.slowBody(100, 500)).toBe("/slow-body?bytes=100&overMs=500");
+    expect(scenarios.fetchLate(0, 5000)).toBe("/fetch-late?afterMs=0&takesMs=5000");
+    expect(scenarios.ticker()).toBe("/ticker?periodMs=250&forMs=30000");
+    expect(scenarios.ticker(50, 100)).toBe("/ticker?periodMs=50&forMs=100");
     expect(scenarios.asset("hero.svg")).toBe("/assets/hero.svg");
   });
 
@@ -59,6 +62,8 @@ describe("every scenario reaches the fixture", () => {
     ["serverRedirectChain", scenarios.serverRedirectChain(2)],
     ["failsThenSucceeds", scenarios.failsThenSucceeds(1, "contract")],
     ["blockMainThread", scenarios.blockMainThread(10, 20)],
+    ["fetchLate", scenarios.fetchLate(0, 50)],
+    ["ticker", scenarios.ticker(50, 100)],
     ["linkLeaf", scenarios.linkLeaf(1)],
     ["linkJsLate", scenarios.linkJsLate(50)],
     ["linkCycle", scenarios.linkCycle("a")],

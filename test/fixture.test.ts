@@ -362,6 +362,49 @@ describe("block-main-thread", () => {
   });
 });
 
+describe("settle signals", () => {
+  let app: ReturnType<typeof buildFixture>;
+  beforeEach(() => {
+    app = buildFixture();
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it("/fetch-late は呼ぶ側の 2 つの時間で fetch を出し、DOM には触らない", async () => {
+    const res = await fetchOk(app, "/fetch-late?afterMs=100&takesMs=2500");
+    expect(res.body).toContain('fetch("/slow-response?delayMs=2500")');
+    expect(res.body).toContain("}, 100);");
+    // The network is the only late thing here. A page that also wrote to the
+    // DOM would let a DOM-quiet consumer pass for the wrong reason.
+    expect(res.body).not.toContain("document.");
+    expect(res.body).not.toContain("<a ");
+  });
+
+  it("/fetch-late の既定は 5 秒の fetch を読み込み直後に出す", async () => {
+    const res = await fetchOk(app, "/fetch-late");
+    expect(res.body).toContain('fetch("/slow-response?delayMs=5000")');
+    expect(res.body).toContain("}, 0);");
+  });
+
+  it("/ticker は periodMs ごとに時計を書き換え、forMs で自分から止まる", async () => {
+    const res = await fetchOk(app, "/ticker?periodMs=40&forMs=900");
+    expect(res.body).toContain("Date.now() + 900");
+    expect(res.body).toContain("setTimeout(tick, 40);");
+    expect(res.body).toContain('clock.textContent = String(Date.now());');
+    // Nothing is fetched: the network must be quiet so that only the DOM signal
+    // can hold a consumer's wait open.
+    expect(res.body).not.toContain("fetch(");
+    expect(res.body).not.toContain("setInterval");
+  });
+
+  it("/ticker の既定は 250 ms ごと、上限の 30 秒まで", async () => {
+    const res = await fetchOk(app, "/ticker");
+    expect(res.body).toContain("Date.now() + 30000");
+    expect(res.body).toContain("setTimeout(tick, 250);");
+  });
+});
+
 describe("__version", () => {
   it("reports the three fields it exists to report", async () => {
     const res = await app.inject("/__version");
@@ -534,6 +577,10 @@ describe("malformed scenario parameters", () => {
     ["failTimes not a number", "/fails-then-succeeds?failTimes=abc"],
     ["afterMs not a number", "/links/js-late?afterMs=abc"],
     ["afterMs over the ceiling", "/links/js-late?afterMs=999999"],
+    ["fetch-late takesMs not a number", "/fetch-late?takesMs=abc"],
+    ["fetch-late takesMs over the ceiling", "/fetch-late?takesMs=999999999"],
+    ["ticker periodMs below the floor", "/ticker?periodMs=0"],
+    ["ticker forMs over the ceiling", "/ticker?forMs=999999"],
     ["fan-out n not a number", "/links/fan-out?n=abc"],
     ["fan-out n over the ceiling", "/links/fan-out?n=99999"],
     ["leaf id not a number", "/links/leaf/abc"],
@@ -553,6 +600,8 @@ describe("malformed scenario parameters", () => {
     ["/large-storage?bytes=2048", 200],
     ["/slow-body?bytes=10&overMs=0", 200],
     ["/links/js-late?afterMs=0", 200],
+    ["/fetch-late?afterMs=0&takesMs=0", 200],
+    ["/ticker?periodMs=10&forMs=0", 200],
     ["/links/fan-out?n=0", 200],
     ["/links/leaf/200", 200],
   ])("still serves %s", async (url, expected) => {
