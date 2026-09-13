@@ -181,6 +181,37 @@ budgets around in-page work (5s). Same page, entirely different test.
 `repeatForMs` is capped at 30000. A page that holds its thread forever outlives
 the capture that asked for it and wedges whatever runs next in the same tab.
 
+### `/fetch-late?afterMs=&takesMs=` — the network is the only late thing
+
+`afterMs` after load (default 0) the page fetches `/slow-response` for `takesMs`
+(default 5000) and does nothing with the answer. No element is added, no text
+changes: the DOM is as quiet as `/plain-html`, and the network is not.
+
+This is for a consumer that ends its post-load wait on a *signal* rather than a
+timer. A DOM-quiet signal fires before the fetch finishes; a network-quiet one
+waits for it. Pass a `takesMs` past the consumer's deadline and the question
+becomes how it records "the page was still loading" — as a failure, or as an
+observation next to the capture.
+
+Both delays are the caller's, so there is no race to lose: a red result here is
+about the consumer's signal, not about timing.
+
+### `/ticker?periodMs=&forMs=` — a page that never settles
+
+Rewrites `#clock` every `periodMs` (default 250, floor 10) for `forMs` (default
+30000, the ceiling). Nothing is fetched, so the network is quiet from the first
+byte; the DOM never is.
+
+The mirror image of `/fetch-late`. A consumer waiting for the DOM to go quiet
+reaches its deadline on this page — every carousel, clock and rotating ad on the
+real web is this page — and what matters is whether it says so rather than
+reporting a settled capture.
+
+`periodMs` has a floor because a period of 0 is a page that never yields, which
+is `/block-main-thread`'s job and a different observation. The stop at `forMs`
+is a `setTimeout` chain, not a `setInterval`, so the page keeps its own deadline
+instead of leaving a timer running in whatever the tab does next.
+
 ### `/http-status/:code` — the non-2xx branch
 
 Returns exactly the status asked for, with a body. Any code: `/http-status/404`,

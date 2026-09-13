@@ -105,6 +105,27 @@ export const scenarios = {
   blockMainThread: (holdMs: number, repeatForMs: number): string =>
     `/block-main-thread?holdMs=${String(holdMs)}&repeatForMs=${String(repeatForMs)}`,
   /**
+   * Fetches `/slow-response` for `takesMs`, starting `afterMs` after load, and
+   * changes nothing in the DOM — the network is the only thing still busy.
+   *
+   * For consumers that end their post-load wait on a signal rather than a
+   * timer: a DOM-quiet signal fires before this fetch finishes, a network-quiet
+   * one waits for it. Pass a `takesMs` past the consumer's deadline to see how
+   * it records "the page was still loading".
+   */
+  fetchLate: (afterMs: number, takesMs: number): string =>
+    `/fetch-late?afterMs=${String(afterMs)}&takesMs=${String(takesMs)}`,
+  /**
+   * Rewrites a clock every `periodMs` for `forMs` — a page that never settles.
+   *
+   * The network is quiet from the start; the DOM never is. A consumer waiting
+   * for the DOM to go quiet reaches its deadline, and the question this page
+   * asks is whether it says so. `periodMs` defaults to 250, `forMs` to the
+   * fixture's 30-second ceiling.
+   */
+  ticker: (periodMs = 250, forMs = 30_000): string =>
+    `/ticker?periodMs=${String(periodMs)}&forMs=${String(forMs)}`,
+  /**
    * Three same-origin links to {@link scenarios.linkLeaf} — the crawl baseline.
    *
    * Every other link scenario is this page with exactly one thing changed, so a

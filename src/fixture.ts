@@ -433,6 +433,48 @@ setTimeout(holdThread, 0);
 </body></html>`;
 
 /**
+ * A page whose only late work is on the network. `afterMs` after it runs, it
+ * fetches `/slow-response` for `takesMs` and does nothing with the answer: no
+ * element is added, no text changes, the DOM is as quiet as a static page.
+ *
+ * That split is the point. A consumer that ends its post-load wait when the
+ * DOM stops changing proceeds before this fetch has finished; one that watches
+ * the network waits for it. Both delays are the caller's, so a green or red
+ * result says something about the consumer's signal, not about timing luck.
+ */
+const fetchLateHtml = (afterMs: number, takesMs: number): string => `<!doctype html>
+<html><head><meta charset="utf-8"><title>fetch-late</title></head><body><h1>fetch-late</h1>
+<script>
+setTimeout(function () { fetch("/slow-response?delayMs=${String(takesMs)}"); }, ${String(afterMs)});
+</script>
+</body></html>`;
+
+/**
+ * A page that never settles: `#clock` is rewritten every `periodMs` for
+ * `forMs`. Nothing is fetched, so the network is quiet from the first byte;
+ * the DOM is not. A consumer waiting for the DOM to go quiet reaches its
+ * deadline here — that outcome, and the fact that it is recorded rather than
+ * treated as a failure, is what this page exists to make observable.
+ *
+ * A `setTimeout` chain rather than `setInterval`, so the stop at `forMs` is a
+ * deadline the page keeps by itself and not a timer a tab may leave running.
+ */
+const tickerHtml = (periodMs: number, forMs: number): string => `<!doctype html>
+<html><head><meta charset="utf-8"><title>ticker</title></head><body><h1>ticker</h1>
+<p id="clock">0</p>
+<script>
+const stopAt = Date.now() + ${String(forMs)};
+const clock = document.getElementById("clock");
+const tick = () => {
+  if (Date.now() >= stopAt) { document.title = "ticker stopped"; return; }
+  clock.textContent = String(Date.now());
+  setTimeout(tick, ${String(periodMs)});
+};
+setTimeout(tick, ${String(periodMs)});
+</script>
+</body></html>`;
+
+/**
  * Ceiling for `repeatForMs`. A page that holds its thread forever survives the
  * capture that asked for it and wedges whatever runs next in the same tab.
  */
@@ -674,6 +716,32 @@ export function buildFixture(): FastifyInstance {
       const holdMs = request.query.holdMs ?? 1_000;
       const repeatForMs = request.query.repeatForMs ?? 10_000;
       return reply.type("text/html").send(blockMainThreadHtml(holdMs, repeatForMs));
+    },
+  );
+
+  app.get<{ Querystring: { afterMs?: number; takesMs?: number } }>(
+    "/fetch-late",
+    { schema: { querystring: numbers({ afterMs: [0, MAX_AFTER_MS], takesMs: [0, MAX_DELAY_MS] }) } },
+    (request, reply) => {
+      const afterMs = request.query.afterMs ?? 0;
+      const takesMs = request.query.takesMs ?? 5_000;
+      return reply.type("text/html").send(fetchLateHtml(afterMs, takesMs));
+    },
+  );
+
+  app.get<{ Querystring: { periodMs?: number; forMs?: number } }>(
+    "/ticker",
+    {
+      // 10 ms is the floor, not 0: a period of 0 is a page that never yields,
+      // which is `/block-main-thread`'s job and a different observation.
+      schema: {
+        querystring: numbers({ periodMs: [10, MAX_REPEAT_FOR_MS], forMs: [0, MAX_REPEAT_FOR_MS] }),
+      },
+    },
+    (request, reply) => {
+      const periodMs = request.query.periodMs ?? 250;
+      const forMs = request.query.forMs ?? MAX_REPEAT_FOR_MS;
+      return reply.type("text/html").send(tickerHtml(periodMs, forMs));
     },
   );
 
