@@ -19,7 +19,7 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive/test/e2e/retry.e2e.test.ts       failsThenSucceeds(2, "e2e")
  *   browserhive/test/e2e/session.e2e.test.ts     largeStorage(3 MiB)   ← see below
  *   browserhive/test/e2e/settle.e2e.test.ts      fetchLate(0, 5000), fetchLate(0, 500), ticker(),
- *                                                linkJsLate(1500), blockMainThread(100, 1200)   ← see below
+ *                                                ticker(250, 1500), blockMainThread(100, 1200)   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -29,9 +29,11 @@ import { scenarios } from "../src/scenarios.js";
  *
  * The settle rows are the same shape (2026-09-13): `/fetch-late` and `/ticker`
  * were written for BrowserHive's post-load wait, whose e2e lands with the
- * consumer's next release. Recorded now for the same reason. So are the two
- * older pages that wait passes next: `linkJsLate(1500)` is a DOM change it must
- * outlast, `blockMainThread(100, 1200)` a run of long tasks it must outlast.
+ * consumer's next release. Recorded now for the same reason. So are the next two:
+ * `ticker(250, 1500)` is a DOM that keeps changing for 1.5 s and then stops,
+ * `blockMainThread(100, 1200)` a run of long tasks; the wait must outlast both.
+ * (`linkJsLate(1500)` was recorded here first and never passed: one change
+ * after a second of silence looks quiet to a one-second window.)
  *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
@@ -59,7 +61,7 @@ describe("values BrowserHive passes today", () => {
     ["fetchLate 5s past the consumer's deadline", scenarios.fetchLate(0, 5000)],
     ["fetchLate 500ms inside it", scenarios.fetchLate(0, 500)],
     ["ticker with the defaults", scenarios.ticker()],
-    ["linkJsLate 1.5s, inside the consumer's deadline", scenarios.linkJsLate(1500)],
+    ["ticker for 1.5s, then still", scenarios.ticker(250, 1500)],
     ["blockMainThread 100ms held, 1.2s repeated", scenarios.blockMainThread(100, 1200)],
   ])("%s is not refused", async (name, path) => {
     // 404, 503 and 302 are all legitimate answers; 400 means a bound is too
