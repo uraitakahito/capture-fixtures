@@ -412,6 +412,56 @@ indistinguishable from being ignored — its spacing would dominate and the test
 would pass either way.
 :::
 
+## Pages a consumer must not keep
+
+For consumers that can be told not to keep a page — BrowserHive's `no-archive`
+URL policy is what these were written for. The question is never "was the page
+fetched": it has to be, or there is nothing to decline. It is "did anything
+derived from it survive" — a screenshot, its HTML, its links, its recorded text.
+
+Every page here writes three tokens — `title-<name>-<tag>`, `text-<name>-<tag>`
+and `link-<name>-<tag>` — into its title, its visible text and a link's text,
+and into no URL. A URL reaches an archive's index whether or not the page was
+kept, so a token in one would be found in every archive and prove nothing. Take
+the spelling from `markedTokens(name, tag)` rather than writing it out.
+
+`name` changes the URL and nothing else: aim a policy at one name and the other
+is the control. `tag` is yours — use a fresh one per test, and the request log
+tells your test's requests apart from everyone else's.
+
+### `/marked/page/:name?tag=` — the page
+
+The three tokens, a link to `/marked/leaf`, an image and a script that fetches a
+JSON document. The image and the fetch go to `/marked/asset/*` with
+`?from=<name>&tag=<tag>`, and they are the point: they reach the request log
+whether or not the consumer keeps the page, so they tell "rendered, then not
+kept" apart from "never loaded".
+
+`&embed=<other>` adds an iframe holding marked page `<other>` — for asking what a
+consumer keeps of a page it was told not to keep but never navigated to.
+
+### `/marked/text/:name?tag=` — the tokens as `text/plain`
+
+The same three tokens, one per line. For a policy that decides by the
+document's media type rather than by its URL.
+
+### `/marked/server-redirect/:hops/:name?tag=` — `hops` redirects, then the page
+
+Exactly `hops` 302s (1 to 20), then `/marked/page/:name` — unlike
+`/server-redirect-chain/:hops`, which sends one more. None of the hops matches a
+pattern aimed at `/marked/page/`; only the page they land on does. A consumer
+that judges a page by the URL it asked for, or by the first response it
+recorded, gets this one wrong.
+
+### `/marked/script-redirect/:name?tag=` — a script sends the browser to the page
+
+`location.replace` on load. It carries no token itself, so anything a test finds
+came from the page the browser landed on.
+
+### `/marked/asset/*`, `/marked/leaf` — what the page loads and links to
+
+`pixel.svg`, `data.json` and the link target. None of them carries a token.
+
 ## Introspection
 
 Two test-only endpoints. They exist because *how many times* something was
