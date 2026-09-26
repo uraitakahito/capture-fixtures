@@ -3,6 +3,8 @@ import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
+import { markedTokens } from "../src/marked.js";
+import { scenarios } from "../src/scenarios.js";
 import { fetchOk } from "./helpers.js";
 
 let app: ReturnType<typeof buildFixture>;
@@ -551,6 +553,101 @@ describe("link scenarios", () => {
   });
 });
 
+describe("pages a consumer must not keep", () => {
+  /** Anything that looks like a token, whichever page it came from. */
+  const TOKEN = /(?:title|text|link)-[a-z0-9-]+/;
+
+  /** Every URL a page points at: its attributes and its script's fetch. */
+  const urlsIn = (html: string): string[] => [
+    ...[...html.matchAll(/(?:src|href)="([^"]*)"/g)].map((m) => m[1] ?? ""),
+    ...[...html.matchAll(/fetch\("([^"]*)"\)/g)].map((m) => m[1] ?? ""),
+  ];
+
+  it("/marked/page/:name writes each token into the page and none into a URL", async () => {
+    const res = await fetchOk(app, scenarios.markedPage("secret", "t1"));
+    const t = markedTokens("secret", "t1");
+
+    expect(res.headers["content-type"]).toContain("text/html");
+    expect(res.body).toContain(`<title>${t.title}</title>`);
+    expect(res.body).toContain(`<p id="text">${t.text}</p>`);
+    expect(res.body).toContain(`>${t.link}</a>`);
+    // The design in one assertion. A URL reaches an archive's index whether or
+    // not the page was kept, so a token in one would be found in every archive
+    // and a consumer's "nothing survived" test could never pass.
+    const urls = urlsIn(res.body);
+    expect(urls).toHaveLength(3);
+    for (const url of urls) expect(url).not.toMatch(TOKEN);
+  });
+
+  it("/marked/page/:name loads the assets the contract names", async () => {
+    const res = await fetchOk(app, scenarios.markedPage("secret", "t1"));
+    // Entity-encoded in the attribute, bare in the script. Both have to decode
+    // to the URL a consumer looks for in the request log.
+    const pixel = scenarios.markedAsset("pixel.svg", "secret", "t1").replace("&", "&amp;");
+    expect(res.body).toContain(`src="${pixel}"`);
+    expect(res.body).toContain(`fetch("${scenarios.markedAsset("data.json", "secret", "t1")}")`);
+  });
+
+  it("name changes the URL and nothing else", async () => {
+    const a = await fetchOk(app, scenarios.markedPage("alpha", "t1"));
+    const b = await fetchOk(app, scenarios.markedPage("bravo", "t1"));
+    // What lets a policy aimed at one name leave the other as the control.
+    expect(a.body.replaceAll("alpha", "NAME")).toBe(b.body.replaceAll("bravo", "NAME"));
+  });
+
+  it("embed puts the other page in an iframe, and only when asked", async () => {
+    const alone = await fetchOk(app, scenarios.markedPage("public", "t1"));
+    expect(alone.body).not.toContain("<iframe");
+
+    const res = await fetchOk(app, scenarios.markedPage("public", "t1", "secret"));
+    expect(res.body).toContain('<iframe src="/marked/page/secret?tag=t1"');
+    // The embedded page's tokens are not in the embedding page's HTML. A
+    // consumer ends up with them only by keeping something of the iframe.
+    expect(res.body).not.toContain(markedTokens("secret", "t1").text);
+  });
+
+  it("/marked/text/:name serves the same tokens as text/plain", async () => {
+    const res = await fetchOk(app, scenarios.markedText("secret", "t1"));
+    const t = markedTokens("secret", "t1");
+    expect(res.headers["content-type"]).toContain("text/plain");
+    for (const token of [t.title, t.text, t.link]) expect(res.body).toContain(token);
+  });
+
+  it("/marked/server-redirect/:hops/:name redirects exactly hops times, then to the page", async () => {
+    let url = scenarios.markedServerRedirect(3, "secret", "t1");
+    const hops: string[] = [];
+    for (;;) {
+      const res = await app.inject(url);
+      if (res.statusCode !== 302) {
+        expect(res.statusCode, url).toBe(200);
+        break;
+      }
+      url = String(res.headers.location);
+      hops.push(url);
+    }
+    expect(hops).toEqual([
+      "/marked/server-redirect/2/secret?tag=t1",
+      "/marked/server-redirect/1/secret?tag=t1",
+      scenarios.markedPage("secret", "t1"),
+    ]);
+  });
+
+  it("/marked/script-redirect/:name sends the browser to the page and carries no token", async () => {
+    const res = await fetchOk(app, scenarios.markedScriptRedirect("secret", "t1"));
+    expect(res.body).toContain(`location.replace("${scenarios.markedPage("secret", "t1")}")`);
+    expect(res.body).not.toMatch(TOKEN);
+  });
+
+  it("the assets and the leaf carry no token", async () => {
+    const pixel = await fetchOk(app, scenarios.markedAsset("pixel.svg", "secret", "t1"));
+    expect(pixel.headers["content-type"]).toContain("image/svg+xml");
+    const data = await fetchOk(app, scenarios.markedAsset("data.json", "secret", "t1"));
+    expect(data.headers["content-type"]).toContain("application/json");
+    const leaf = await fetchOk(app, "/marked/leaf?tag=t1");
+    for (const res of [pixel, data, leaf]) expect(res.body).not.toMatch(TOKEN);
+  });
+});
+
 describe("malformed scenario parameters", () => {
   let app: ReturnType<typeof buildFixture>;
 
@@ -586,6 +683,13 @@ describe("malformed scenario parameters", () => {
     ["leaf id not a number", "/links/leaf/abc"],
     ["leaf id below the range", "/links/leaf/0"],
     ["cycle side that is neither", "/links/cycle/c"],
+    ["marked name with an uppercase letter", "/marked/page/Secret?tag=t1"],
+    ["marked page without a tag", "/marked/page/secret"],
+    ["marked tag with markup in it", "/marked/page/secret?tag=%3Cb%3E"],
+    ["marked embed that is not a name", "/marked/page/public?tag=t1&embed=a%2Fb"],
+    ["marked hops of zero", "/marked/server-redirect/0/secret?tag=t1"],
+    ["marked hops over the ceiling", "/marked/server-redirect/21/secret?tag=t1"],
+    ["marked asset without from", "/marked/asset/pixel.svg?tag=t1"],
   ])("rejects %s", async (_name, url) => {
     expect((await app.inject(url)).statusCode).toBe(400);
   });
@@ -604,6 +708,9 @@ describe("malformed scenario parameters", () => {
     ["/ticker?periodMs=10&forMs=0", 200],
     ["/links/fan-out?n=0", 200],
     ["/links/leaf/200", 200],
+    ["/marked/page/secret?tag=t1", 200],
+    ["/marked/server-redirect/1/secret?tag=t1", 302],
+    ["/marked/server-redirect/20/secret?tag=t1", 302],
   ])("still serves %s", async (url, expected) => {
     expect((await app.inject(url)).statusCode).toBe(expected);
   });

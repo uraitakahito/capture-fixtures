@@ -212,6 +212,50 @@ export const scenarios = {
    */
   robotsTxt: "/robots.txt",
 
+  /**
+   * A page that writes three tokens into its title, its visible text and a
+   * link's text — and into no URL. Spelled by `markedTokens(name, tag)`.
+   *
+   * For consumers that can be told not to keep a page: none of the tokens may
+   * survive in anything the consumer stored. `name` changes the URL and nothing
+   * else, so a policy aimed at one name leaves the other as the control. `tag`
+   * is the caller's, one per test, so the request log can tell tests apart.
+   *
+   * The page loads {@link scenarios.markedAsset} `pixel.svg` and fetches
+   * `data.json`. Those requests arrive whether or not the consumer keeps the
+   * page — they are how "rendered, then not kept" differs from "never loaded".
+   *
+   * `embed` adds an iframe holding marked page `embed`.
+   */
+  markedPage: (name: string, tag: string, embed?: string): string =>
+    `/marked/page/${name}?tag=${tag}` + (embed === undefined ? "" : `&embed=${embed}`),
+  /** The same three tokens as a `text/plain` document — for policies by media type. */
+  markedText: (name: string, tag: string): string => `/marked/text/${name}?tag=${tag}`,
+  /**
+   * Exactly `hops` server-side 302s (1 to 20), then {@link scenarios.markedPage}.
+   *
+   * Unlike {@link scenarios.serverRedirectChain}, which sends one more than it
+   * is asked for. The hops match no pattern aimed at `/marked/page/`, so only
+   * the page they land on does — the case a consumer judging by the requested
+   * URL, or by the first hop it recorded, gets wrong.
+   */
+  markedServerRedirect: (hops: number, name: string, tag: string): string =>
+    `/marked/server-redirect/${String(hops)}/${name}?tag=${tag}`,
+  /**
+   * `location.replace` to {@link scenarios.markedPage} on load.
+   *
+   * Carries no token itself, so anything found belongs to the page the browser
+   * landed on.
+   */
+  markedScriptRedirect: (name: string, tag: string): string =>
+    `/marked/script-redirect/${name}?tag=${tag}`,
+  /**
+   * What marked page `from` loads: the image it paints and the JSON its script
+   * fetches. Neither carries a token.
+   */
+  markedAsset: (file: "pixel.svg" | "data.json", from: string, tag: string): string =>
+    `/marked/asset/${file}?from=${from}&tag=${tag}`,
+
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */
   asset: (path: string): string => `/assets/${path}`,
 } as const;

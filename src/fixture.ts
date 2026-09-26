@@ -5,6 +5,7 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { BUILD_INFO } from "./generated/version.js";
+import { markedTokens } from "./marked.js";
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
@@ -389,6 +390,60 @@ const LINK_HIDDEN_HTML = `<!doctype html><html><head><meta charset="utf-8"><titl
 </body></html>`;
 
 /**
+ * A marked page — see `src/marked.ts` for why the tokens go where they go.
+ *
+ * The image and the fetch carry `from=<name>`, so when one marked page embeds
+ * another, the request log still says which of the two asked.
+ *
+ * `embed` adds an iframe holding marked page `embed`. It is how a consumer is
+ * asked what it keeps of a page it was told not to keep but never navigated to.
+ * The iframe's URL has no `embed` of its own, so a page cannot embed itself
+ * forever.
+ *
+ * `&amp;` in the attributes and a bare `&` in the script are both deliberate:
+ * attribute values are entity-decoded, script text is not.
+ */
+const markedPageHtml = (name: string, tag: string, embed: string | undefined): string => {
+  const t = markedTokens(name, tag);
+  const frame =
+    embed === undefined
+      ? ""
+      : `\n<iframe src="/marked/page/${embed}?tag=${tag}" width="320" height="240"></iframe>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${t.title}</title></head><body>
+<p id="text">${t.text}</p>
+<a href="/marked/leaf?tag=${tag}">${t.link}</a>
+<img src="/marked/asset/pixel.svg?from=${name}&amp;tag=${tag}" width="64" height="64" alt="">${frame}
+<script>fetch("/marked/asset/data.json?from=${name}&tag=${tag}")</script>
+</body></html>`;
+};
+
+/**
+ * The same three tokens as a `text/plain` document — for a consumer that
+ * decides by the document's media type rather than by its URL.
+ */
+const markedText = (name: string, tag: string): string => {
+  const t = markedTokens(name, tag);
+  return `${t.title}\n${t.text}\n${t.link}\n`;
+};
+
+/**
+ * Sends the browser to a marked page by script, on load.
+ *
+ * It carries no token itself, so anything a test finds came from the page the
+ * browser landed on — the one a consumer has to judge.
+ */
+const markedScriptRedirectHtml = (name: string, tag: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>redirecting</title></head><body><script>location.replace("/marked/page/${name}?tag=${tag}")</script></body></html>`;
+
+/** Where a marked page's link goes. No token: it is not the page under test. */
+const MARKED_LEAF_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>leaf</title></head><body>
+<h1>leaf</h1>
+</body></html>`;
+
+/** The image a marked page loads. No token, only a shape to paint. */
+const MARKED_PIXEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#4a7"/></svg>`;
+
+/**
  * The only robots policy here.
  *
  * `Crawl-delay: 3` is chosen to be **longer** than a consumer would normally
@@ -534,6 +589,20 @@ const numbers = (
     ]),
   ),
   ...(required.length > 0 && { required }),
+});
+
+/**
+ * A JSON Schema for the names and tags of the marked pages.
+ *
+ * They are written into HTML and into URLs, so they come from a set that needs
+ * escaping in neither. A value outside it is a 400 — for the same reason as
+ * `numbers()`: a page that cannot be built as asked must not answer 200.
+ */
+const SLUG = { type: "string", pattern: "^[a-z0-9-]{1,32}$" } as const;
+const slugs = (names: string[], required: string[] = names): Record<string, unknown> => ({
+  type: "object",
+  properties: Object.fromEntries(names.map((name) => [name, SLUG])),
+  required,
 });
 
 /** Trickle `bytes` bytes of "a" over roughly `overMs` milliseconds, in ~10 chunks. */
@@ -799,6 +868,75 @@ export function buildFixture(): FastifyInstance {
       const n = request.query.n ?? 10;
       return reply.type("text/html").send(linkFanOutHtml(n));
     },
+  );
+
+  // Pages a consumer must not keep. See src/marked.ts.
+  app.get<{ Params: { name: string }; Querystring: { tag: string; embed?: string } }>(
+    "/marked/page/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag", "embed"], ["tag"]) } },
+    (request, reply) =>
+      reply
+        .type("text/html")
+        .send(markedPageHtml(request.params.name, request.query.tag, request.query.embed)),
+  );
+
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/text/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) =>
+      reply.type("text/plain").send(markedText(request.params.name, request.query.tag)),
+  );
+
+  // Exactly `hops` redirects — unlike /server-redirect-chain/:hops, which sends
+  // one more. Zero is refused: a chain of none is the page itself.
+  app.get<{ Params: { hops: number; name: string }; Querystring: { tag: string } }>(
+    "/marked/server-redirect/:hops/:name",
+    {
+      schema: {
+        params: {
+          type: "object",
+          properties: { hops: { type: "integer", minimum: 1, maximum: MAX_HOPS }, name: SLUG },
+          required: ["hops", "name"],
+        },
+        querystring: slugs(["tag"]),
+      },
+    },
+    (request, reply) => {
+      const { hops, name } = request.params;
+      const { tag } = request.query;
+      const next =
+        hops > 1
+          ? `/marked/server-redirect/${String(hops - 1)}/${name}?tag=${tag}`
+          : `/marked/page/${name}?tag=${tag}`;
+      return reply.redirect(next, 302);
+    },
+  );
+
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/script-redirect/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) =>
+      reply
+        .type("text/html")
+        .send(markedScriptRedirectHtml(request.params.name, request.query.tag)),
+  );
+
+  app.get(
+    "/marked/asset/pixel.svg",
+    { schema: { querystring: slugs(["from", "tag"]) } },
+    (_request, reply) => reply.type("image/svg+xml").send(MARKED_PIXEL_SVG),
+  );
+
+  app.get(
+    "/marked/asset/data.json",
+    { schema: { querystring: slugs(["from", "tag"]) } },
+    (_request, reply) => reply.send({ ok: true }),
+  );
+
+  app.get(
+    "/marked/leaf",
+    { schema: { querystring: slugs(["tag"]) } },
+    (_request, reply) => reply.type("text/html").send(MARKED_LEAF_HTML),
   );
 
   app.get<{ Querystring: { bytes?: number } }>(

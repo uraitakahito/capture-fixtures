@@ -16,6 +16,12 @@ describe("scenarios URL contract", () => {
     expect(scenarios.ticker()).toBe("/ticker?periodMs=250&forMs=30000");
     expect(scenarios.ticker(50, 100)).toBe("/ticker?periodMs=50&forMs=100");
     expect(scenarios.asset("hero.svg")).toBe("/assets/hero.svg");
+    expect(scenarios.markedPage("secret", "e7")).toBe("/marked/page/secret?tag=e7");
+    expect(scenarios.markedPage("public", "e13", "secret")).toBe("/marked/page/public?tag=e13&embed=secret");
+    expect(scenarios.markedText("secret", "e12")).toBe("/marked/text/secret?tag=e12");
+    expect(scenarios.markedServerRedirect(2, "secret", "e8")).toBe("/marked/server-redirect/2/secret?tag=e8");
+    expect(scenarios.markedScriptRedirect("secret", "e11")).toBe("/marked/script-redirect/secret?tag=e11");
+    expect(scenarios.markedAsset("data.json", "secret", "e7")).toBe("/marked/asset/data.json?from=secret&tag=e7");
   });
 
   it("url-encodes counter keys so parallel tests stay isolated", () => {
@@ -68,6 +74,11 @@ describe("every scenario reaches the fixture", () => {
     ["linkJsLate", scenarios.linkJsLate(50)],
     ["linkCycle", scenarios.linkCycle("a")],
     ["linkFanOut", scenarios.linkFanOut(3)],
+    ["markedPage", scenarios.markedPage("secret", "contract")],
+    ["markedText", scenarios.markedText("secret", "contract")],
+    ["markedServerRedirect", scenarios.markedServerRedirect(1, "secret", "contract")],
+    ["markedScriptRedirect", scenarios.markedScriptRedirect("secret", "contract")],
+    ["markedAsset", scenarios.markedAsset("pixel.svg", "secret", "contract")],
     ["asset", scenarios.asset("hero.svg")],
   ];
 
