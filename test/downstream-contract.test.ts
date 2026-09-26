@@ -22,6 +22,7 @@ import { scenarios } from "../src/scenarios.js";
  *                                                ticker(250, 1500), blockMainThread(100, 1200)   ← see below
  *   browserhive/test/e2e/page-document.e2e.test.ts  markedPage, markedServerRedirect(2, …),
  *                                                markedScriptRedirect, markedText, markedAsset   ← see below
+ *   browserhive/test/e2e/sites.e2e.test.ts       markedPage(…, "secret", { embedOrigin })   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -42,6 +43,11 @@ import { scenarios } from "../src/scenarios.js";
  * behind, which lands with its next release. BrowserHive adds a suffix to each
  * tag so reruns against one fixture stay apart; the values here are the
  * shortest it sends.
+ *
+ * So is the embedOrigin row (2026-09-26). BrowserHive's e2e runs a second
+ * instance in each of its sets — `capture-fixtures-b`, `-2-b`, `-3-b` — and
+ * embeds from it. The row spells the longest of the three, so an origin bound
+ * that would refuse one of them goes red here.
  *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
@@ -73,6 +79,10 @@ describe("values BrowserHive passes today", () => {
     ["blockMainThread 100ms held, 1.2s repeated", scenarios.blockMainThread(100, 1200)],
     ["markedPage secret", scenarios.markedPage("secret", "e7")],
     ["markedPage public embedding secret", scenarios.markedPage("public", "e13", "secret")],
+    [
+      "markedPage public embedding secret from another site",
+      scenarios.markedPage("public", "s2", "secret", { embedOrigin: "http://capture-fixtures-3-b.browserhive:8080" }),
+    ],
     ["markedServerRedirect 2 hops", scenarios.markedServerRedirect(2, "secret", "e8")],
     ["markedScriptRedirect", scenarios.markedScriptRedirect("secret", "e11")],
     ["markedText", scenarios.markedText("secret", "e12")],

@@ -225,10 +225,15 @@ export const scenarios = {
    * `data.json`. Those requests arrive whether or not the consumer keeps the
    * page — they are how "rendered, then not kept" differs from "never loaded".
    *
-   * `embed` adds an iframe holding marked page `embed`.
+   * `embed` adds an iframe holding marked page `embed`. `embedOrigin` serves
+   * that iframe from another instance of this fixture — a bare origin such as
+   * `http://capture-fixtures-b.example:8080`. Under another name it is another
+   * site, and a browser gives the iframe a process of its own.
    */
-  markedPage: (name: string, tag: string, embed?: string): string =>
-    `/marked/page/${name}?tag=${tag}` + (embed === undefined ? "" : `&embed=${embed}`),
+  markedPage: (name: string, tag: string, embed?: string, opts: { embedOrigin?: string } = {}): string =>
+    `/marked/page/${name}?tag=${tag}` +
+    (embed === undefined ? "" : `&embed=${embed}`) +
+    (opts.embedOrigin === undefined ? "" : `&embedOrigin=${encodeURIComponent(opts.embedOrigin)}`),
   /** The same three tokens as a `text/plain` document — for policies by media type. */
   markedText: (name: string, tag: string): string => `/marked/text/${name}?tag=${tag}`,
   /**
