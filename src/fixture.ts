@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
+import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, type Duplex } from "node:stream";
 
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -446,6 +448,53 @@ const markedText = (name: string, tag: string): string => {
 const markedScriptRedirectHtml = (name: string, tag: string): string =>
   `<!doctype html><html><head><meta charset="utf-8"><title>redirecting</title></head><body><script>location.replace("/marked/page/${name}?tag=${tag}")</script></body></html>`;
 
+/**
+ * Opens marked page `name` in a new window on load. Carries no token: the page
+ * under test is the one in the window, which a browser runs as a target of its
+ * own, apart from the page that opened it.
+ */
+const markedPopupHtml = (name: string, tag: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>popup</title></head><body><script>window.open("/marked/page/${name}?tag=${tag}", "_blank")</script></body></html>`;
+
+/**
+ * Starts a dedicated worker on load. The request under test is the worker's own
+ * fetch, which comes from the worker rather than from the page.
+ */
+const markedWorkerHtml = (name: string, tag: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>worker</title></head><body><script>new Worker("/marked/asset/worker.js?from=${name}&tag=${tag}")</script></body></html>`;
+
+/**
+ * The worker's script. It reads `from` and `tag` from its own URL, so one script
+ * serves every page, and asks for `data.json` as `<from>-worker`.
+ */
+const MARKED_WORKER_JS = `const q = new URLSearchParams(self.location.search);
+fetch("/marked/asset/data.json?from=" + q.get("from") + "-worker&tag=" + q.get("tag"));
+`;
+
+/**
+ * Asks for `data.json` in each of the ways of `MARKED_KINDS`, as
+ * `<name>-<kind>`. `&amp;` in the attributes, a bare `&` in the script — see
+ * `markedPageHtml`.
+ */
+const markedKindsHtml = (name: string, tag: string): string => {
+  const url = (kind: string, amp: string): string => `/marked/asset/data.json?from=${name}-${kind}${amp}tag=${tag}`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>kinds</title>
+<link rel="prefetch" href="${url("prefetch", "&amp;")}">
+<link rel="preload" as="fetch" crossorigin href="${url("preload", "&amp;")}">
+</head><body><script>
+navigator.sendBeacon("${url("beacon", "&")}");
+fetch("${url("keepalive", "&")}", { keepalive: true });
+new EventSource("${url("eventsource", "&")}");
+</script></body></html>`;
+};
+
+/** Opens a WebSocket to `/marked/socket` on load. Carries no token. */
+const markedWebSocketHtml = (name: string, tag: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>websocket</title></head><body><script>new WebSocket("ws://" + location.host + "/marked/socket?from=${name}&tag=${tag}")</script></body></html>`;
+
+/** The GUID RFC 6455 appends to the client's key to form `Sec-WebSocket-Accept`. */
+const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
 /** Where a marked page's link goes. No token: it is not the page under test. */
 const MARKED_LEAF_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>leaf</title></head><body>
 <h1>leaf</h1>
@@ -710,8 +759,9 @@ export function buildFixture(): FastifyInstance {
   const requests: RecordedRequest[] = [];
   let truncated = false;
 
-  app.addHook("onRequest", (request, _reply, done) => {
-    hits.set(request.url, (hits.get(request.url) ?? 0) + 1);
+  /** Counts a request and, unless it is introspection, logs it. */
+  const note = (url: string, method: string, headers: IncomingHttpHeaders): void => {
+    hits.set(url, (hits.get(url) ?? 0) + 1);
 
     // Introspection endpoints stay out of the log. Reading it must not change
     // what it says, or answering "was the second request conditional?" starts
@@ -719,19 +769,57 @@ export function buildFixture(): FastifyInstance {
     //
     // The counter above deliberately keeps counting them: it has always done
     // so, and tests are written against that.
-    if (!request.url.startsWith("/__")) {
-      if (requests.length >= REQUEST_LOG_LIMIT) {
-        requests.shift();
-        truncated = true;
-      }
-      const recorded: RecordedRequest = { url: request.url, method: request.method };
-      for (const [header, field] of RECORDED_HEADERS) {
-        const value = request.headers[header];
-        if (typeof value === "string") recorded[field] = value;
-      }
-      requests.push(recorded);
+    if (url.startsWith("/__")) return;
+    if (requests.length >= REQUEST_LOG_LIMIT) {
+      requests.shift();
+      truncated = true;
     }
+    const recorded: RecordedRequest = { url, method };
+    for (const [header, field] of RECORDED_HEADERS) {
+      const value = headers[header];
+      if (typeof value === "string") recorded[field] = value;
+    }
+    requests.push(recorded);
+  };
+
+  app.addHook("onRequest", (request, _reply, done) => {
+    note(request.url, request.method, request.headers);
     done();
+  });
+
+  // A WebSocket handshake arrives as the server's `upgrade` event, which runs no
+  // route and no hook. Count and log it here like any other request — the
+  // handshake reaching the log is what a test looks for — then answer it. Only
+  // /marked/socket speaks WebSocket; anything else is refused.
+  const slug = new RegExp(SLUG.pattern);
+  app.server.on("upgrade", (request: IncomingMessage, socket: Duplex) => {
+    const url = request.url ?? "/";
+    note(url, request.method ?? "GET", request.headers);
+    const [path, search] = url.split("?");
+    const query = new URLSearchParams(search ?? "");
+    const key = request.headers["sec-websocket-key"];
+    const valid =
+      path === "/marked/socket" &&
+      [query.get("from"), query.get("tag")].every((value) => value !== null && slug.test(value)) &&
+      typeof key === "string";
+    socket.on("error", () => undefined);
+    // Close the connection outright once the answer is written. `end()` alone
+    // leaves it half-open until the client closes its side, and a server that
+    // is shutting down waits for it.
+    const answer = (response: string): void => {
+      socket.end(response, () => socket.destroy());
+    };
+    if (!valid) {
+      answer("HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n");
+      return;
+    }
+    const accept = createHash("sha1").update(`${key}${WEBSOCKET_GUID}`).digest("base64");
+    // Nothing is sent over the socket: the handshake is the point.
+    answer(
+      ["HTTP/1.1 101 Switching Protocols", "upgrade: websocket", "connection: Upgrade", `sec-websocket-accept: ${accept}`, "", ""].join(
+        "\r\n",
+      ),
+    );
   });
 
   // Static assets (referenced by /lazy and available as /assets/*).
@@ -963,6 +1051,38 @@ export function buildFixture(): FastifyInstance {
         .send(markedScriptRedirectHtml(request.params.name, request.query.tag)),
   );
 
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/popup/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) => reply.type("text/html").send(markedPopupHtml(request.params.name, request.query.tag)),
+  );
+
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/worker/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) => reply.type("text/html").send(markedWorkerHtml(request.params.name, request.query.tag)),
+  );
+
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/kinds/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) => reply.type("text/html").send(markedKindsHtml(request.params.name, request.query.tag)),
+  );
+
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/websocket/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) => reply.type("text/html").send(markedWebSocketHtml(request.params.name, request.query.tag)),
+  );
+
+  // The WebSocket endpoint. A handshake never reaches this route (see the
+  // `upgrade` listener above); a plain GET is told what the endpoint speaks.
+  app.get(
+    "/marked/socket",
+    { schema: { querystring: slugs(["from", "tag"]) } },
+    (_request, reply) => reply.code(426).header("upgrade", "websocket").send("this endpoint speaks WebSocket"),
+  );
+
   app.get(
     "/marked/asset/pixel.svg",
     { schema: { querystring: slugs(["from", "tag"]) } },
@@ -973,6 +1093,20 @@ export function buildFixture(): FastifyInstance {
     "/marked/asset/data.json",
     { schema: { querystring: slugs(["from", "tag"]) } },
     (_request, reply) => reply.send({ ok: true }),
+  );
+
+  // navigator.sendBeacon sends a POST. Answer it rather than 404: the request is
+  // logged either way, but a page's beacon should not look like a broken link.
+  app.post(
+    "/marked/asset/data.json",
+    { schema: { querystring: slugs(["from", "tag"]) } },
+    (_request, reply) => reply.code(204).send(),
+  );
+
+  app.get(
+    "/marked/asset/worker.js",
+    { schema: { querystring: slugs(["from", "tag"]) } },
+    (_request, reply) => reply.type("text/javascript").send(MARKED_WORKER_JS),
   );
 
   app.get(

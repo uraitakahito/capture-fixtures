@@ -1,9 +1,10 @@
+import type { AddressInfo } from "node:net";
 import { runInNewContext } from "node:vm";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
-import { markedTokens } from "../src/marked.js";
+import { MARKED_KINDS, markedTokens } from "../src/marked.js";
 import { scenarios } from "../src/scenarios.js";
 import { fetchOk } from "./helpers.js";
 
@@ -665,6 +666,95 @@ describe("pages a consumer must not keep", () => {
     const leaf = await fetchOk(app, "/marked/leaf?tag=t1");
     for (const res of [pixel, data, leaf]) expect(res.body).not.toMatch(TOKEN);
   });
+
+  it("/marked/popup/:name opens the marked page in a new window and carries no token", async () => {
+    const res = await fetchOk(app, scenarios.markedPopup("secret", "t1"));
+    expect(res.body).toContain(`window.open("${scenarios.markedPage("secret", "t1")}", "_blank")`);
+    expect(res.body).not.toMatch(TOKEN);
+  });
+
+  it("/marked/worker/:name starts a worker whose own fetch asks for data.json as <name>-worker", async () => {
+    const page = await fetchOk(app, scenarios.markedWorker("public", "t1"));
+    expect(page.body).toContain(`new Worker("${scenarios.markedAsset("worker.js", "public", "t1")}")`);
+    const script = await fetchOk(app, scenarios.markedAsset("worker.js", "public", "t1"));
+    expect(script.headers["content-type"]).toContain("javascript");
+    // Run the script as the worker would, at the URL it was loaded from, and
+    // see what it asks for.
+    const asked: string[] = [];
+    runInNewContext(script.body, {
+      self: { location: new URL(`http://fixture${scenarios.markedAsset("worker.js", "public", "t1")}`) },
+      URLSearchParams,
+      fetch: (url: string) => asked.push(url),
+    });
+    expect(asked).toEqual([scenarios.markedAsset("data.json", "public-worker", "t1")]);
+    for (const res of [page, script]) expect(res.body).not.toMatch(TOKEN);
+  });
+
+  it("/marked/kinds/:name asks for data.json in each of the ways, as <name>-<kind>", async () => {
+    const res = await fetchOk(app, scenarios.markedKinds("public", "t1"));
+    const url = (kind: string): string => scenarios.markedAsset("data.json", `public-${kind}`, "t1");
+    const attr = (kind: string): string => url(kind).replaceAll("&", "&amp;");
+    expect(res.body).toContain(`<link rel="prefetch" href="${attr("prefetch")}">`);
+    expect(res.body).toContain(`<link rel="preload" as="fetch" crossorigin href="${attr("preload")}">`);
+    expect(res.body).toContain(`navigator.sendBeacon("${url("beacon")}")`);
+    expect(res.body).toContain(`fetch("${url("keepalive")}", { keepalive: true })`);
+    expect(res.body).toContain(`new EventSource("${url("eventsource")}")`);
+    // The constant a consumer iterates names exactly the ways on the page.
+    expect(res.body.match(/data\.json/g)).toHaveLength(MARKED_KINDS.length);
+    for (const kind of MARKED_KINDS) expect(res.body).toContain(`from=public-${kind}`);
+    expect(res.body).not.toMatch(TOKEN);
+  });
+
+  it("a beacon's POST to data.json is answered, not refused", async () => {
+    const res = await app.inject({ method: "POST", url: scenarios.markedAsset("data.json", "public-beacon", "t1") });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it("/marked/websocket/:name opens the socket on load and carries no token", async () => {
+    const res = await fetchOk(app, scenarios.markedWebSocket("public", "t1"));
+    expect(res.body).toContain(`new WebSocket("ws://" + location.host + "${scenarios.markedSocket("public", "t1")}")`);
+    expect(res.body).not.toMatch(TOKEN);
+  });
+
+  it("/marked/socket answers a plain GET with 426", async () => {
+    const res = await app.inject(scenarios.markedSocket("public", "t1"));
+    expect(res.statusCode).toBe(426);
+    expect(res.headers.upgrade).toBe("websocket");
+  });
+
+  /** Opens a WebSocket to the listening fixture and reports how the handshake went. */
+  const handshake = async (path: string): Promise<{ result: "open" | "error"; port: number }> => {
+    // inject() cannot upgrade, so these listen for real.
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const { port } = app.server.address() as AddressInfo;
+    const ws = new WebSocket(`ws://127.0.0.1:${String(port)}${path}`);
+    const result = await new Promise<"open" | "error">((resolve) => {
+      ws.addEventListener("open", () => {
+        resolve("open");
+      });
+      ws.addEventListener("error", () => {
+        resolve("error");
+      });
+    });
+    ws.close();
+    return { result, port };
+  };
+
+  it("/marked/socket records the handshake in the request log like any other request", async () => {
+    // Nothing else can hold a WebSocket back, so the log is where a consumer
+    // learns that one was opened.
+    const { result, port } = await handshake(scenarios.markedSocket("public", "t1"));
+    expect(result).toBe("open");
+    const log = (await (await fetch(`http://127.0.0.1:${String(port)}/__requests`)).json()) as RequestLog;
+    expect(log.requests.map((r) => `${r.method} ${r.url}`)).toContain(`GET ${scenarios.markedSocket("public", "t1")}`);
+  });
+
+  it("/marked/socket refuses a handshake it cannot build, and still logs it", async () => {
+    const { result, port } = await handshake("/marked/socket?from=Public&tag=t1");
+    expect(result).toBe("error");
+    const log = (await (await fetch(`http://127.0.0.1:${String(port)}/__requests`)).json()) as RequestLog;
+    expect(log.requests.map((r) => r.url)).toContain("/marked/socket?from=Public&tag=t1");
+  });
 });
 
 describe("malformed scenario parameters", () => {
@@ -712,6 +802,12 @@ describe("malformed scenario parameters", () => {
     ["marked hops of zero", "/marked/server-redirect/0/secret?tag=t1"],
     ["marked hops over the ceiling", "/marked/server-redirect/21/secret?tag=t1"],
     ["marked asset without from", "/marked/asset/pixel.svg?tag=t1"],
+    ["marked popup name with an uppercase letter", "/marked/popup/Secret?tag=t1"],
+    ["marked worker without a tag", "/marked/worker/public"],
+    ["marked kinds name that is not a name", "/marked/kinds/a%2Fb?tag=t1"],
+    ["marked websocket without a tag", "/marked/websocket/public"],
+    ["marked socket without from", "/marked/socket?tag=t1"],
+    ["marked worker script without from", "/marked/asset/worker.js?tag=t1"],
   ])("rejects %s", async (_name, url) => {
     expect((await app.inject(url)).statusCode).toBe(400);
   });

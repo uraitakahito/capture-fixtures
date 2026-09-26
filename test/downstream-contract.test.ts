@@ -23,6 +23,8 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive/test/e2e/page-document.e2e.test.ts  markedPage, markedServerRedirect(2, …),
  *                                                markedScriptRedirect, markedText, markedAsset   ← see below
  *   browserhive/test/e2e/sites.e2e.test.ts       markedPage(…, "secret", { embedOrigin })   ← see below
+ *   browserhive/test/e2e/deny.e2e.test.ts        markedPopup, markedKinds, markedWorker, markedWebSocket,
+ *                                                markedSocket, markedAsset("worker.js", …)   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -48,6 +50,10 @@ import { scenarios } from "../src/scenarios.js";
  * instance in each of its sets — `capture-fixtures-b`, `-2-b`, `-3-b` — and
  * embeds from it. The row spells the longest of the three, so an origin bound
  * that would refuse one of them goes red here.
+ *
+ * The deny rows are that shape again (2026-09-26): the popup, kinds, worker and
+ * WebSocket pages were written for BrowserHive's test that a request its policy
+ * denies never leaves the capturing machine, which lands with its next release.
  *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
@@ -79,6 +85,12 @@ describe("values BrowserHive passes today", () => {
     ["blockMainThread 100ms held, 1.2s repeated", scenarios.blockMainThread(100, 1200)],
     ["markedPage secret", scenarios.markedPage("secret", "e7")],
     ["markedPage public embedding secret", scenarios.markedPage("public", "e13", "secret")],
+    ["markedPopup secret", scenarios.markedPopup("secret", "d6")],
+    ["markedKinds secret", scenarios.markedKinds("secret", "d9")],
+    ["markedWorker secret", scenarios.markedWorker("secret", "d10")],
+    ["markedAsset worker.js", scenarios.markedAsset("worker.js", "secret", "d10")],
+    ["markedWebSocket secret", scenarios.markedWebSocket("secret", "d12")],
+    ["markedSocket secret", scenarios.markedSocket("secret", "d12")],
     [
       "markedPage public embedding secret from another site",
       scenarios.markedPage("public", "s2", "secret", { embedOrigin: "http://capture-fixtures-3-b.browserhive:8080" }),

@@ -5,4 +5,4 @@ export { buildFixture, REQUEST_LOG_LIMIT } from "./fixture.js";
 // surface as an undefined at 2am.
 export type { RecordedRequest, RequestLog } from "./fixture.js";
 export { scenarios, type Scenarios } from "./scenarios.js";
-export { markedTokens, type MarkedTokens } from "./marked.js";
+export { MARKED_KINDS, markedTokens, type MarkedKind, type MarkedTokens } from "./marked.js";

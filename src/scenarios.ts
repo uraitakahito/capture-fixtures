@@ -255,10 +255,43 @@ export const scenarios = {
   markedScriptRedirect: (name: string, tag: string): string =>
     `/marked/script-redirect/${name}?tag=${tag}`,
   /**
-   * What marked page `from` loads: the image it paints and the JSON its script
-   * fetches. Neither carries a token.
+   * Opens {@link scenarios.markedPage} `name` in a new window on load
+   * (`window.open`). Carries no token itself.
+   *
+   * A browser runs the window as a target of its own, apart from the page that
+   * opened it — the case a consumer that guards only the page misses.
    */
-  markedAsset: (file: "pixel.svg" | "data.json", from: string, tag: string): string =>
+  markedPopup: (name: string, tag: string): string => `/marked/popup/${name}?tag=${tag}`,
+  /**
+   * Starts a dedicated worker on load. The worker's script,
+   * {@link scenarios.markedAsset} `worker.js` with `from=<name>`, fetches
+   * `data.json` as `from=<name>-worker`. Carries no token itself.
+   */
+  markedWorker: (name: string, tag: string): string => `/marked/worker/${name}?tag=${tag}`,
+  /**
+   * On load, asks for `data.json` in each of the ways of `MARKED_KINDS` — a
+   * beacon, a `keepalive` fetch, prefetch and preload links, an `EventSource` —
+   * as `from=<name>-<kind>`. Carries no token itself.
+   */
+  markedKinds: (name: string, tag: string): string => `/marked/kinds/${name}?tag=${tag}`,
+  /**
+   * Opens a WebSocket to {@link scenarios.markedSocket} on load. Carries no
+   * token itself.
+   */
+  markedWebSocket: (name: string, tag: string): string => `/marked/websocket/${name}?tag=${tag}`,
+  /**
+   * The WebSocket endpoint {@link scenarios.markedWebSocket} opens. The handshake
+   * reaches the request log like any other request — which is how a test tells
+   * that it was sent, since nothing else can hold a WebSocket back. A plain GET
+   * answers 426.
+   */
+  markedSocket: (from: string, tag: string): string => `/marked/socket?from=${from}&tag=${tag}`,
+  /**
+   * What marked page `from` loads: the image it paints, the JSON its script
+   * fetches, and the script a {@link scenarios.markedWorker} page runs in its
+   * worker. None carries a token.
+   */
+  markedAsset: (file: "pixel.svg" | "data.json" | "worker.js", from: string, tag: string): string =>
     `/marked/asset/${file}?from=${from}&tag=${tag}`,
 
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */

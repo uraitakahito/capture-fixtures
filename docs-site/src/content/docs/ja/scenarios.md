@@ -449,9 +449,37 @@ URL ではなく文書のメディア型で決める方針のためのもの。
 読み込むと `location.replace` する。
 自分は印を持たないので、試験が見つけた印は、着いた先のページのもの。
 
+### `/marked/popup/:name?tag=` ― 新しいウィンドウでページを開く
+
+読み込み時に `window.open` で `/marked/page/:name` を開く。
+このページ自身は印を持たない。
+ブラウザはそのウィンドウを、開いたページとは別の target として動かすので、頼まれたページだけを見張る消費者には、ウィンドウの中で起きることが見えない。
+
+### `/marked/worker/:name?tag=` ― worker 自身の要求
+
+読み込み時に dedicated worker を起こす。
+worker のスクリプトは `/marked/asset/worker.js?from=<name>&tag=<tag>` で、`data.json` を `from=<name>-worker` として取りに行く。
+この要求はページではなく worker から出る。
+
+### `/marked/kinds/:name?tag=` ― ふつうの fetch の外の要求
+
+読み込み時に `data.json` を 5 通りの仕方で、それぞれ `from=<name>-<kind>` として求める。
+beacon（`navigator.sendBeacon`。POST）、`keepalive` の fetch、`<link rel="prefetch">`、`<link rel="preload">`、`EventSource` の 5 つ。
+`MARKED_KINDS` がこの 5 つを名指すので、試験は一覧を書き写さず、定数を回す。
+
+### `/marked/websocket/:name?tag=`・`/marked/socket?from=&tag=` ― WebSocket
+
+ページは読み込み時に `/marked/socket?from=<name>&tag=<tag>` へ WebSocket を開く。
+handshake はほかの要求と同じく要求ログに届き、試験はそれで開かれたことを知る。
+ブラウザには WebSocket を止める手段が無い。
+エンドポイントへのふつうの GET は 426 を返す。
+
+service worker のページは無い。
+登録には secure context が要り、この fixture は素の http で配っている。
+
 ### `/marked/asset/*`・`/marked/leaf` ― ページが読むものとリンク先
 
-`pixel.svg`、`data.json` とリンクの行き先。
+`pixel.svg`、`data.json`（beacon の POST には 204 を返す）、worker の `worker.js`、リンクの行き先。
 どれも印を持たない。
 
 ## イントロスペクション
