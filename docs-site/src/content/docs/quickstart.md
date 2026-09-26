@@ -47,7 +47,9 @@ curl -sf http://<capture-fixtures-ip>:8080/health
 ```
 
 Under Apple Container with a project DNS domain, consumers reach it by name
-instead — BrowserHive's stack runs it as `capture-fixtures.browserhive:8080`.
+instead. BrowserHive's e2e stack runs two in each of its sets, under two names so
+that a browser sees two sites: `capture-fixtures-a.browserhive:8080` and
+`capture-fixtures-b.browserhive:8080` in the first set.
 
 ### Configuration
 
