@@ -25,6 +25,12 @@ describe("scenarios URL contract", () => {
     expect(scenarios.markedServerRedirect(2, "secret", "e8")).toBe("/marked/server-redirect/2/secret?tag=e8");
     expect(scenarios.markedScriptRedirect("secret", "e11")).toBe("/marked/script-redirect/secret?tag=e11");
     expect(scenarios.markedAsset("data.json", "secret", "e7")).toBe("/marked/asset/data.json?from=secret&tag=e7");
+    expect(scenarios.markedAsset("worker.js", "public", "d10")).toBe("/marked/asset/worker.js?from=public&tag=d10");
+    expect(scenarios.markedPopup("secret", "d6")).toBe("/marked/popup/secret?tag=d6");
+    expect(scenarios.markedWorker("public", "d10")).toBe("/marked/worker/public?tag=d10");
+    expect(scenarios.markedKinds("public", "d9")).toBe("/marked/kinds/public?tag=d9");
+    expect(scenarios.markedWebSocket("public", "d12")).toBe("/marked/websocket/public?tag=d12");
+    expect(scenarios.markedSocket("public", "d12")).toBe("/marked/socket?from=public&tag=d12");
   });
 
   it("url-encodes counter keys so parallel tests stay isolated", () => {
@@ -81,6 +87,11 @@ describe("every scenario reaches the fixture", () => {
     ["markedText", scenarios.markedText("secret", "contract")],
     ["markedServerRedirect", scenarios.markedServerRedirect(1, "secret", "contract")],
     ["markedScriptRedirect", scenarios.markedScriptRedirect("secret", "contract")],
+    ["markedPopup", scenarios.markedPopup("secret", "contract")],
+    ["markedWorker", scenarios.markedWorker("public", "contract")],
+    ["markedKinds", scenarios.markedKinds("public", "contract")],
+    ["markedWebSocket", scenarios.markedWebSocket("public", "contract")],
+    ["markedSocket", scenarios.markedSocket("public", "contract")],
     ["markedAsset", scenarios.markedAsset("pixel.svg", "secret", "contract")],
     ["asset", scenarios.asset("hero.svg")],
   ];

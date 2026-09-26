@@ -36,3 +36,14 @@ export const markedTokens = (name: string, tag: string): MarkedTokens => ({
   text: `text-${name}-${tag}`,
   link: `link-${name}-${tag}`,
 });
+
+/**
+ * The ways the `/marked/kinds` page asks for `data.json` outside an ordinary
+ * fetch, each written into the request's `from` as `<name>-<kind>`: a beacon, a
+ * `keepalive` fetch, `<link rel="prefetch">`, `<link rel="preload">` and an
+ * `EventSource`. A consumer that holds back requests has to hold back these too.
+ */
+export const MARKED_KINDS = ["beacon", "keepalive", "prefetch", "preload", "eventsource"] as const;
+
+/** One of {@link MARKED_KINDS}. */
+export type MarkedKind = (typeof MARKED_KINDS)[number];

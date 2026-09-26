@@ -466,9 +466,40 @@ recorded, gets this one wrong.
 `location.replace` on load. It carries no token itself, so anything a test finds
 came from the page the browser landed on.
 
+### `/marked/popup/:name?tag=` — the page in a new window
+
+`window.open` on load, opening `/marked/page/:name`. It carries no token itself.
+A browser runs the window as a target of its own, apart from the page that
+opened it, so a consumer that guards only the page it was asked to capture
+misses whatever the window does.
+
+### `/marked/worker/:name?tag=` — a worker's own request
+
+Starts a dedicated worker on load. The worker's script is
+`/marked/asset/worker.js?from=<name>&tag=<tag>`, and it fetches `data.json` as
+`from=<name>-worker` — a request from the worker, not from the page.
+
+### `/marked/kinds/:name?tag=` — requests outside an ordinary fetch
+
+Asks for `data.json` five ways on load, each as `from=<name>-<kind>`: a beacon
+(`navigator.sendBeacon`, a POST), a `keepalive` fetch, `<link rel="prefetch">`,
+`<link rel="preload">` and an `EventSource`. `MARKED_KINDS` names the five, so a
+test iterates the constant rather than spelling the list.
+
+### `/marked/websocket/:name?tag=`, `/marked/socket?from=&tag=` — a WebSocket
+
+The page opens a WebSocket to `/marked/socket?from=<name>&tag=<tag>` on load. The
+handshake reaches the request log like any other request, and that is how a test
+learns one was opened: a browser offers no way to hold a WebSocket back. A plain
+GET to the endpoint answers 426.
+
+There is no service worker page. Registering one needs a secure context, and
+this fixture serves plain http.
+
 ### `/marked/asset/*`, `/marked/leaf` — what the page loads and links to
 
-`pixel.svg`, `data.json` and the link target. None of them carries a token.
+`pixel.svg`, `data.json` (a beacon's POST to it is answered with 204), the
+worker's `worker.js`, and the link target. None of them carries a token.
 
 ## Introspection
 
