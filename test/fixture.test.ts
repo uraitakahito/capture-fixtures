@@ -262,7 +262,7 @@ describe("introspection", () => {
     expect(log.truncated).toBe(false);
   });
 
-  it("/__requests keeps the headers that explain caching, and no others", async () => {
+  it("/__requests keeps the headers that explain caching, and not every header", async () => {
     await app.inject({
       url: "/plain-html",
       headers: {
@@ -283,6 +283,15 @@ describe("introspection", () => {
     expect(only?.ifModifiedSince).toBe("Sun, 02 Aug 2026 00:00:00 GMT");
     expect(only?.method).toBe("GET");
     expect(Object.keys(only ?? {})).not.toContain("cookie");
+  });
+
+  it("/__requests keeps the Host, the name a request came in under", async () => {
+    // Two instances of this fixture are two sites to a browser only because
+    // their names differ. The Host is what shows which one served an iframe.
+    await app.inject({ url: "/plain-html", headers: { host: "capture-fixtures-b.example:8080" } });
+
+    const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
+    expect(log.requests[0]?.host).toBe("capture-fixtures-b.example:8080");
   });
 
   it("/__requests does not record the introspection endpoints themselves", async () => {
@@ -606,6 +615,16 @@ describe("pages a consumer must not keep", () => {
     expect(res.body).not.toContain(markedTokens("secret", "t1").text);
   });
 
+  it("embedOrigin serves the iframe from another origin, and moves nothing else", async () => {
+    const origin = "http://capture-fixtures-b.example:8080";
+    const here = await fetchOk(app, scenarios.markedPage("public", "t1", "secret"));
+    const there = await fetchOk(app, scenarios.markedPage("public", "t1", "secret", { embedOrigin: origin }));
+    expect(there.body).toContain(`<iframe src="${origin}/marked/page/secret?tag=t1"`);
+    // The page's own image and fetch stay on this origin: take the origin out
+    // of the iframe and the two pages are the same.
+    expect(there.body.replace(origin, "")).toBe(here.body);
+  });
+
   it("/marked/text/:name serves the same tokens as text/plain", async () => {
     const res = await fetchOk(app, scenarios.markedText("secret", "t1"));
     const t = markedTokens("secret", "t1");
@@ -687,6 +706,9 @@ describe("malformed scenario parameters", () => {
     ["marked page without a tag", "/marked/page/secret"],
     ["marked tag with markup in it", "/marked/page/secret?tag=%3Cb%3E"],
     ["marked embed that is not a name", "/marked/page/public?tag=t1&embed=a%2Fb"],
+    ["marked embedOrigin with nothing to embed", "/marked/page/public?tag=t1&embedOrigin=http%3A%2F%2Fb.example"],
+    ["marked embedOrigin with a path", "/marked/page/public?tag=t1&embed=secret&embedOrigin=http%3A%2F%2Fb.example%2Fx"],
+    ["marked embedOrigin with a quote in it", "/marked/page/public?tag=t1&embed=secret&embedOrigin=http%3A%2F%2Fb%22x"],
     ["marked hops of zero", "/marked/server-redirect/0/secret?tag=t1"],
     ["marked hops over the ceiling", "/marked/server-redirect/21/secret?tag=t1"],
     ["marked asset without from", "/marked/asset/pixel.svg?tag=t1"],

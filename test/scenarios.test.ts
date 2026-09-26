@@ -18,6 +18,9 @@ describe("scenarios URL contract", () => {
     expect(scenarios.asset("hero.svg")).toBe("/assets/hero.svg");
     expect(scenarios.markedPage("secret", "e7")).toBe("/marked/page/secret?tag=e7");
     expect(scenarios.markedPage("public", "e13", "secret")).toBe("/marked/page/public?tag=e13&embed=secret");
+    expect(scenarios.markedPage("public", "s2", "secret", { embedOrigin: "http://b.example:8080" })).toBe(
+      "/marked/page/public?tag=s2&embed=secret&embedOrigin=http%3A%2F%2Fb.example%3A8080",
+    );
     expect(scenarios.markedText("secret", "e12")).toBe("/marked/text/secret?tag=e12");
     expect(scenarios.markedServerRedirect(2, "secret", "e8")).toBe("/marked/server-redirect/2/secret?tag=e8");
     expect(scenarios.markedScriptRedirect("secret", "e11")).toBe("/marked/script-redirect/secret?tag=e11");

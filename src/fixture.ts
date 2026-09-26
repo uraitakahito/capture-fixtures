@@ -400,15 +400,26 @@ const LINK_HIDDEN_HTML = `<!doctype html><html><head><meta charset="utf-8"><titl
  * The iframe's URL has no `embed` of its own, so a page cannot embed itself
  * forever.
  *
+ * `embedOrigin` puts that iframe on another origin — another instance of this
+ * fixture, run under another name. A browser keeps an iframe from another site
+ * in its own process, and a consumer that only watches the page misses what
+ * happens there. The embedded page's image and fetch are relative, so they go
+ * to the instance that served it.
+ *
  * `&amp;` in the attributes and a bare `&` in the script are both deliberate:
  * attribute values are entity-decoded, script text is not.
  */
-const markedPageHtml = (name: string, tag: string, embed: string | undefined): string => {
+const markedPageHtml = (
+  name: string,
+  tag: string,
+  embed: string | undefined,
+  embedOrigin: string | undefined,
+): string => {
   const t = markedTokens(name, tag);
   const frame =
     embed === undefined
       ? ""
-      : `\n<iframe src="/marked/page/${embed}?tag=${tag}" width="320" height="240"></iframe>`;
+      : `\n<iframe src="${embedOrigin ?? ""}/marked/page/${embed}?tag=${tag}" width="320" height="240"></iframe>`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${t.title}</title></head><body>
 <p id="text">${t.text}</p>
 <a href="/marked/leaf?tag=${tag}">${t.link}</a>
@@ -605,6 +616,13 @@ const slugs = (names: string[], required: string[] = names): Record<string, unkn
   required,
 });
 
+/**
+ * An origin written into an iframe's `src`. The same promise as `SLUG`: nothing
+ * in it needs escaping. And only an origin — a path or a query would make it a
+ * different page from the one asked for.
+ */
+const ORIGIN = { type: "string", pattern: "^https?://[a-z0-9.-]+(:[0-9]{1,5})?$" } as const;
+
 /** Trickle `bytes` bytes of "a" over roughly `overMs` milliseconds, in ~10 chunks. */
 async function* slowBody(bytes: number, overMs: number): AsyncGenerator<Buffer> {
   const chunks = 10;
@@ -646,6 +664,12 @@ export interface RecordedRequest {
   ifModifiedSince?: string;
   cacheControl?: string;
   acceptLanguage?: string;
+  /**
+   * The name the request came in under. Two instances of this fixture are two
+   * sites to a browser only because their names differ, so this is what shows
+   * an iframe from another site was fetched from there.
+   */
+  host?: string;
 }
 
 /**
@@ -672,6 +696,7 @@ const RECORDED_HEADERS = [
   ["if-modified-since", "ifModifiedSince"],
   ["cache-control", "cacheControl"],
   ["accept-language", "acceptLanguage"],
+  ["host", "host"],
 ] as const;
 
 export function buildFixture(): FastifyInstance {
@@ -871,13 +896,30 @@ export function buildFixture(): FastifyInstance {
   );
 
   // Pages a consumer must not keep. See src/marked.ts.
-  app.get<{ Params: { name: string }; Querystring: { tag: string; embed?: string } }>(
+  app.get<{
+    Params: { name: string };
+    Querystring: { tag: string; embed?: string; embedOrigin?: string };
+  }>(
     "/marked/page/:name",
-    { schema: { params: slugs(["name"]), querystring: slugs(["tag", "embed"], ["tag"]) } },
-    (request, reply) =>
-      reply
-        .type("text/html")
-        .send(markedPageHtml(request.params.name, request.query.tag, request.query.embed)),
+    {
+      schema: {
+        params: slugs(["name"]),
+        querystring: {
+          type: "object",
+          properties: { tag: SLUG, embed: SLUG, embedOrigin: ORIGIN },
+          required: ["tag"],
+          // An origin with nothing to embed is not a page anyone can build.
+          // `dependencies`, not `dependentRequired`: Fastify's Ajv is draft-07,
+          // and in strict mode the newer keyword fails the route at startup.
+          dependencies: { embedOrigin: ["embed"] },
+        },
+      },
+    },
+    (request, reply) => {
+      const { tag, embed, embedOrigin } = request.query;
+      const html = markedPageHtml(request.params.name, tag, embed, embedOrigin);
+      return reply.type("text/html").send(html);
+    },
   );
 
   app.get<{ Params: { name: string }; Querystring: { tag: string } }>(

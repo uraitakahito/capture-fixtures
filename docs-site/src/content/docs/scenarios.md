@@ -440,6 +440,14 @@ kept" apart from "never loaded".
 `&embed=<other>` adds an iframe holding marked page `<other>` — for asking what a
 consumer keeps of a page it was told not to keep but never navigated to.
 
+`&embedOrigin=<origin>` serves that iframe from another instance of
+capture-fixtures. Run a second one under another name and a browser treats it as
+another site, with a process of its own — what a consumer watching only the page
+never sees. Only a bare origin is accepted (`http://name:port`, no path), and only
+together with `embed`; anything else is a 400. The embedded page's image and fetch
+go to the instance that served it, and each entry in the request log carries
+`host`, the name the request came in under.
+
 ### `/marked/text/:name?tag=` — the tokens as `text/plain`
 
 The same three tokens, one per line. For a policy that decides by the
