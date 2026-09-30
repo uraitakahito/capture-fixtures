@@ -9,6 +9,20 @@
  * Static scenarios are plain strings; parameterised ones are builder functions.
  * Prefix each with the fixture origin, e.g. `` `http://${ip}:8080` + scenarios.ok ``.
  */
+import type { MarkedWindowWay } from "./marked.js";
+
+/** How {@link scenarios.markedOpener} asks: which way, how often, how many times, and from where. */
+export interface MarkedOpenerOptions {
+  /** One of `MARKED_WINDOW_WAYS`. The page's default is `open`. */
+  readonly way?: MarkedWindowWay;
+  /** Milliseconds between asks. The page's default is 250. */
+  readonly every?: number;
+  /** How many times to ask. The page's default is 20. */
+  readonly times?: number;
+  /** Serve the asking iframe from this origin instead of asking from the page itself. */
+  readonly embedOrigin?: string;
+}
+
 // #region scenarios
 export const scenarios = {
   /** Plain 200 HTML, no script and no sub-resources — the success baseline. */
@@ -262,6 +276,28 @@ export const scenarios = {
    * opened it — the case a consumer that guards only the page misses.
    */
   markedPopup: (name: string, tag: string): string => `/marked/popup/${name}?tag=${tag}`,
+  /**
+   * Keeps asking for a new window holding {@link scenarios.markedPage} `name`:
+   * once every `every` ms (default 250), `times` times (default 20), by `way`
+   * (one of `MARKED_WINDOW_WAYS`; default `open`). Carries no token itself.
+   *
+   * A browser refuses a window asked for without a user gesture, so on its own
+   * this page opens nothing. A consumer that evaluates script in the page with
+   * a gesture hands it one, and the next ask succeeds. The page keeps asking so
+   * that one ask lands after whatever the consumer did. Whether a window opened
+   * shows in the request log: `/marked/page/<name>?tag=<tag>` is requested
+   * only by a window that was allowed to load it.
+   *
+   * `embedOrigin` moves the asking into an iframe served by that origin —
+   * another instance of this fixture, run under another name, so the frame is
+   * from another site. The page itself then only holds the iframe.
+   */
+  markedOpener: (name: string, tag: string, opts: MarkedOpenerOptions = {}): string =>
+    `/marked/opener/${name}?tag=${tag}` +
+    (opts.way === undefined ? "" : `&way=${opts.way}`) +
+    (opts.every === undefined ? "" : `&every=${String(opts.every)}`) +
+    (opts.times === undefined ? "" : `&times=${String(opts.times)}`) +
+    (opts.embedOrigin === undefined ? "" : `&embedOrigin=${encodeURIComponent(opts.embedOrigin)}`),
   /**
    * Starts a dedicated worker on load. The worker's script,
    * {@link scenarios.markedAsset} `worker.js` with `from=<name>`, fetches
