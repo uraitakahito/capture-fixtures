@@ -88,6 +88,7 @@ describe("every scenario reaches the fixture", () => {
     ["markedServerRedirect", scenarios.markedServerRedirect(1, "secret", "contract")],
     ["markedScriptRedirect", scenarios.markedScriptRedirect("secret", "contract")],
     ["markedPopup", scenarios.markedPopup("secret", "contract")],
+    ["markedOpener", scenarios.markedOpener("secret", "contract")],
     ["markedWorker", scenarios.markedWorker("public", "contract")],
     ["markedKinds", scenarios.markedKinds("public", "contract")],
     ["markedWebSocket", scenarios.markedWebSocket("public", "contract")],

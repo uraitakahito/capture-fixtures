@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
-import { MARKED_KINDS, markedTokens } from "../src/marked.js";
+import { MARKED_KINDS, MARKED_WINDOW_WAYS, markedTokens, type MarkedWindowWay } from "../src/marked.js";
 import { scenarios } from "../src/scenarios.js";
 import { fetchOk } from "./helpers.js";
 
@@ -671,6 +671,60 @@ describe("pages a consumer must not keep", () => {
     const res = await fetchOk(app, scenarios.markedPopup("secret", "t1"));
     expect(res.body).toContain(`window.open("${scenarios.markedPage("secret", "t1")}", "_blank")`);
     expect(res.body).not.toMatch(TOKEN);
+  });
+
+  it.each(MARKED_WINDOW_WAYS)(
+    "/marked/opener/:name keeps asking for a window holding the marked page, by way %s, and carries no token",
+    async (way) => {
+      const res = await fetchOk(app, scenarios.markedOpener("secret", "t1", { way }));
+      const target = scenarios.markedPage("secret", "t1");
+      // Every way leads to the same URL, so the request log says the same thing
+      // whichever way opened it. The GET form rebuilds it from its `tag` input.
+      const asks: Record<MarkedWindowWay, string> = {
+        open: `window.open("${target}", "_blank")`,
+        link: `a.href = "${target}"; a.target = "_blank"; document.body.append(a); a.click()`,
+        form: `f.action = "/marked/page/secret"; f.method = "get"; f.target = "_blank"; const i = document.createElement("input"); i.name = "tag"; i.value = "t1"`,
+        modifier: `a.href = "${target}"; document.body.append(a); a.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window, ctrlKey: true, metaKey: true }))`,
+      };
+      expect(res.body).toContain(asks[way]);
+      // The defaults: every 250 ms, 20 times.
+      expect(res.body).toContain("let left = 20;");
+      expect(res.body).toContain("}, 250);");
+      expect(res.body).not.toContain("<iframe");
+      expect(res.body).not.toMatch(TOKEN);
+    },
+  );
+
+  it("/marked/opener/:name takes every and times, and asks the default way when none is named", async () => {
+    const res = await fetchOk(app, scenarios.markedOpener("secret", "t1", { every: 100, times: 3 }));
+    expect(res.body).toContain(`window.open("${scenarios.markedPage("secret", "t1")}", "_blank")`);
+    expect(res.body).toContain("let left = 3;");
+    expect(res.body).toContain("}, 100);");
+  });
+
+  it("/marked/opener/:name with embedOrigin holds the asking iframe and asks nothing itself", async () => {
+    const res = await fetchOk(
+      app,
+      scenarios.markedOpener("secret", "t1", { way: "link", every: 100, times: 3, embedOrigin: "http://other:8080" }),
+    );
+    expect(res.body).toContain(
+      `<iframe src="http://other:8080/marked/opener/secret?tag=t1&amp;way=link&amp;every=100&amp;times=3"`,
+    );
+    expect(res.body).not.toContain("<script");
+    expect(res.body).not.toMatch(TOKEN);
+  });
+
+  it("/marked/opener/:name refuses a way it does not know and bounds outside the range", async () => {
+    for (const url of [
+      "/marked/opener/secret?tag=t1&way=popup",
+      "/marked/opener/secret?tag=t1&every=10",
+      "/marked/opener/secret?tag=t1&every=6000",
+      "/marked/opener/secret?tag=t1&times=0",
+      "/marked/opener/secret?tag=t1&times=101",
+      "/marked/opener/secret",
+    ]) {
+      expect((await app.inject(url)).statusCode, url).toBe(400);
+    }
   });
 
   it("/marked/worker/:name starts a worker whose own fetch asks for data.json as <name>-worker", async () => {

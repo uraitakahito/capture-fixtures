@@ -7,7 +7,7 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { BUILD_INFO } from "./generated/version.js";
-import { markedTokens } from "./marked.js";
+import { MARKED_WINDOW_WAYS, markedTokens, type MarkedWindowWay } from "./marked.js";
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
@@ -455,6 +455,53 @@ const markedScriptRedirectHtml = (name: string, tag: string): string =>
  */
 const markedPopupHtml = (name: string, tag: string): string =>
   `<!doctype html><html><head><meta charset="utf-8"><title>popup</title></head><body><script>window.open("/marked/page/${name}?tag=${tag}", "_blank")</script></body></html>`;
+
+/**
+ * Keeps asking for a new window holding marked page `name`: every `every` ms,
+ * `times` times, by `way`. Carries no token itself.
+ *
+ * A single ask on load is refused by any browser, because the page holds no
+ * user gesture. A consumer that evaluates script in the page hands it one, and
+ * the next ask succeeds — so the page keeps asking, and one ask lands after
+ * whatever the consumer did. Each way leads to the same URL, so the request log
+ * says the same thing whichever way opened it.
+ *
+ * With `embedOrigin`, the page holds an iframe served by that origin and asks
+ * nothing itself; the asking happens inside the frame, which a browser from
+ * another site runs as a target of its own. `&amp;` in the attribute, a bare
+ * `&` in the script — see `markedPageHtml`.
+ */
+const markedOpenerHtml = (
+  name: string,
+  tag: string,
+  way: MarkedWindowWay,
+  every: number,
+  times: number,
+  embedOrigin: string | undefined,
+): string => {
+  const target = `/marked/page/${name}?tag=${tag}`;
+  if (embedOrigin !== undefined) {
+    const src = `${embedOrigin}/marked/opener/${name}?tag=${tag}&amp;way=${way}&amp;every=${String(every)}&amp;times=${String(times)}`;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>opener</title></head><body>
+<p>opener host</p>
+<iframe src="${src}" width="320" height="240"></iframe>
+</body></html>`;
+  }
+  const asks: Record<MarkedWindowWay, string> = {
+    open: `window.open("${target}", "_blank");`,
+    link: `const a = document.createElement("a"); a.href = "${target}"; a.target = "_blank"; document.body.append(a); a.click(); a.remove();`,
+    form: `const f = document.createElement("form"); f.action = "/marked/page/${name}"; f.method = "get"; f.target = "_blank"; const i = document.createElement("input"); i.name = "tag"; i.value = "${tag}"; f.append(i); document.body.append(f); f.submit(); f.remove();`,
+    modifier: `const a = document.createElement("a"); a.href = "${target}"; document.body.append(a); a.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window, ctrlKey: true, metaKey: true })); a.remove();`,
+  };
+  return `<!doctype html><html><head><meta charset="utf-8"><title>opener</title></head><body>
+<p>opener</p>
+<script>
+const ask = () => { ${asks[way]} };
+let left = ${String(times)};
+const timer = setInterval(() => { ask(); left -= 1; if (left <= 0) clearInterval(timer); }, ${String(every)});
+</script>
+</body></html>`;
+};
 
 /**
  * Starts a dedicated worker on load. The request under test is the worker's own
@@ -1055,6 +1102,37 @@ export function buildFixture(): FastifyInstance {
     "/marked/popup/:name",
     { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
     (request, reply) => reply.type("text/html").send(markedPopupHtml(request.params.name, request.query.tag)),
+  );
+
+  // The bounds keep the page usable as a test input: below 50 ms the asks
+  // outrun a browser's timer, and above 100 asks the page is no longer "a few".
+  app.get<{
+    Params: { name: string };
+    Querystring: { tag: string; way?: MarkedWindowWay; every?: number; times?: number; embedOrigin?: string };
+  }>(
+    "/marked/opener/:name",
+    {
+      schema: {
+        params: slugs(["name"]),
+        querystring: {
+          type: "object",
+          properties: {
+            tag: SLUG,
+            way: { type: "string", enum: [...MARKED_WINDOW_WAYS] },
+            every: { type: "integer", minimum: 50, maximum: 5000 },
+            times: { type: "integer", minimum: 1, maximum: 100 },
+            embedOrigin: ORIGIN,
+          },
+          required: ["tag"],
+        },
+      },
+    },
+    (request, reply) => {
+      const { tag, way = "open", every = 250, times = 20, embedOrigin } = request.query;
+      return reply
+        .type("text/html")
+        .send(markedOpenerHtml(request.params.name, tag, way, every, times, embedOrigin));
+    },
   );
 
   app.get<{ Params: { name: string }; Querystring: { tag: string } }>(

@@ -47,3 +47,15 @@ export const MARKED_KINDS = ["beacon", "keepalive", "prefetch", "preload", "even
 
 /** One of {@link MARKED_KINDS}. */
 export type MarkedKind = (typeof MARKED_KINDS)[number];
+
+/**
+ * The ways the `/marked/opener` page asks for a new window: `window.open`, a
+ * click on a link with `target="_blank"`, a `submit()` of a form with
+ * `target="_blank"`, and a script-made click carrying the ctrl and meta keys,
+ * which a browser turns into a new tab. A consumer that keeps the page from
+ * opening windows has to keep it from opening one every way.
+ */
+export const MARKED_WINDOW_WAYS = ["open", "link", "form", "modifier"] as const;
+
+/** One of {@link MARKED_WINDOW_WAYS}. */
+export type MarkedWindowWay = (typeof MARKED_WINDOW_WAYS)[number];

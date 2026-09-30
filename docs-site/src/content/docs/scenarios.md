@@ -473,6 +473,27 @@ A browser runs the window as a target of its own, apart from the page that
 opened it, so a consumer that guards only the page it was asked to capture
 misses whatever the window does.
 
+### `/marked/opener/:name?tag=` — a page that keeps asking for a window
+
+Keeps asking for a new window holding `/marked/page/:name`: once every `every`
+ms (default 250), `times` times (default 20), by `way`. The ways are the four of
+`MARKED_WINDOW_WAYS`: `open` (`window.open`), `link` (a click on a link with
+`target="_blank"`), `form` (a `submit()` of a form with `target="_blank"`) and
+`modifier` (a script-made click carrying the ctrl and meta keys, which a browser
+turns into a new tab). It carries no token itself.
+
+A browser refuses a window asked for without a user gesture, so on its own this
+page opens nothing. A consumer that evaluates script in the page with a gesture
+hands it one, and the next ask succeeds. The page keeps asking so that one ask
+lands after whatever the consumer did. Every way leads to the same URL, so the
+request log says the same thing whichever way opened it: `/marked/page/<name>`
+is requested only by a window that was allowed to load it.
+
+`embedOrigin` moves the asking into an iframe served by that origin, another
+instance of this fixture run under another name. The page then only holds the
+iframe, and the asking happens inside a frame the browser runs apart from the
+page.
+
 ### `/marked/worker/:name?tag=` — a worker's own request
 
 Starts a dedicated worker on load. The worker's script is

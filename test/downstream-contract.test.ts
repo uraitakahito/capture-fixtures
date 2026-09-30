@@ -86,6 +86,12 @@ describe("values BrowserHive passes today", () => {
     ["markedPage secret", scenarios.markedPage("secret", "e7")],
     ["markedPage public embedding secret", scenarios.markedPage("public", "e13", "secret")],
     ["markedPopup secret", scenarios.markedPopup("secret", "d6")],
+    ["markedOpener by window.open", scenarios.markedOpener("w5-open", "w5", { way: "open" })],
+    ["markedOpener by a modifier click", scenarios.markedOpener("w5-modifier", "w5", { way: "modifier" })],
+    [
+      "markedOpener asking from another site",
+      scenarios.markedOpener("w9", "w9", { embedOrigin: "http://capture-fixtures-3-b.browserhive:8080" }),
+    ],
     ["markedKinds secret", scenarios.markedKinds("secret", "d9")],
     ["markedWorker secret", scenarios.markedWorker("secret", "d10")],
     ["markedAsset worker.js", scenarios.markedAsset("worker.js", "secret", "d10")],
