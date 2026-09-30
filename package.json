@@ -43,8 +43,8 @@
   "author": "Takahito Urai",
   "license": "The Unlicense",
   "dependencies": {
-    "@fastify/static": "^10.1.3",
-    "fastify": "^5.12.3"
+    "@fastify/static": "^10.1.5",
+    "fastify": "^5.12.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
