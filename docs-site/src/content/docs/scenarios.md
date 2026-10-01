@@ -212,6 +212,29 @@ is `/block-main-thread`'s job and a different observation. The stop at `forMs`
 is a `setTimeout` chain, not a `setInterval`, so the page keeps its own deadline
 instead of leaving a timer running in whatever the tab does next.
 
+### `/fetch-storm?bytes=&everyMs=&burst=&forMs=` — bodies still being read when recording stops
+
+Every `everyMs` (default 40, floor 10) the page starts `burst` fetches (default
+3, at most 10) of `/compressible-body` at `bytes` bytes (default 5 MB), until
+`forMs` has passed (default 30000, the ceiling).
+
+This is for a consumer that reads a response body back from the browser after
+the response has loaded, the way CDP's `Network.getResponseBody` works. Reading
+megabytes back takes tens of milliseconds, so on this page several reads are in
+flight at any instant, including the instant the consumer stops recording. A
+consumer that does not wait for them, and does not say which ones it gave up on,
+leaves an archive that disagrees with itself: a response without its request, a
+200 with an empty body, a count with no record behind it.
+
+Every request carries its own `i` (1, 2, 3, …), so one request is one URL and
+an archive can be checked request by request. `/__request-counts` says how many
+the page really sent. That is the control: an archive with nothing wrong in it
+proves little if the page had stopped asking.
+
+The bodies are gzipped rather than merely large, and `/compressible-body`
+below says why. Like `/ticker`, the page stops by itself at `forMs` with a
+`setTimeout` chain.
+
 ### `/http-status/:code` — the non-2xx branch
 
 Returns exactly the status asked for, with a body. Any code: `/http-status/404`,
@@ -238,6 +261,25 @@ A body of exactly `bytes` bytes, sent at once. Defaults to 1 MiB.
 
 An archiver has to cap what it stores or a single video swallows the disk. This
 route makes the cap testable from both sides: one byte under, one byte over.
+
+### `/compressible-body?bytes=` — small on the wire, large once decoded
+
+`bytes` bytes of `a` (default 1 MiB), sent as gzip. Five megabytes travel as
+about five kilobytes.
+
+`/large-body` is the same size on both sides. A consumer that checks the wire
+size first drops it without ever reading the body back, and one that records it
+reaches its cumulative cap after a few dozen. Neither keeps a body read in
+flight for long.
+
+This route separates the two sizes. The wire size passes a consumer's first
+check, so the consumer has to fetch the body, and only then learns the body is
+over its cap. With a cap below `bytes`, every request costs a full read and
+stores nothing, so a page can keep a consumer reading for as long as it likes.
+`/fetch-storm` is that page.
+
+An optional `i` is accepted and ignored. It is there so `/fetch-storm` can give
+every request its own URL.
 
 ### `/slow-body?bytes=&overMs=` — slow bodies
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
 import { join } from "node:path";
 import { Readable, type Duplex } from "node:stream";
+import { gzipSync } from "node:zlib";
 
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -637,12 +638,54 @@ setTimeout(tick, ${String(periodMs)});
 </body></html>`;
 
 /**
+ * A page that keeps the network busy with bodies that are cheap to send and
+ * slow to hand over: every `everyMs` it starts `burst` fetches of
+ * `/compressible-body`, until `forMs` has passed.
+ *
+ * It exists for consumers that read a response body back from the browser
+ * after the response has loaded (CDP's `Network.getResponseBody`). Reading
+ * megabytes back takes tens of milliseconds, so several reads are in flight at
+ * any instant, including the instant the consumer stops recording. What the
+ * archive says about those responses is the observation.
+ *
+ * Every request carries its own `i`, so one request is one URL. An archive can
+ * then be checked request by request, and `/__request-counts` says how many
+ * the page really sent.
+ *
+ * A `setTimeout` chain like `/ticker`'s, for the same reason: the stop at
+ * `forMs` is a deadline the page keeps by itself.
+ */
+const fetchStormHtml = (bytes: number, everyMs: number, burst: number, forMs: number): string => `<!doctype html>
+<html><head><meta charset="utf-8"><title>fetch-storm</title></head><body><h1>fetch-storm</h1>
+<script>
+const stopAt = Date.now() + ${String(forMs)};
+let i = 0;
+const round = () => {
+  if (Date.now() >= stopAt) { document.title = "fetch-storm stopped"; return; }
+  for (let b = 0; b < ${String(burst)}; b += 1) {
+    i += 1;
+    fetch("/compressible-body?bytes=${String(bytes)}&i=" + i).then((r) => r.arrayBuffer()).catch(() => {});
+  }
+  setTimeout(round, ${String(everyMs)});
+};
+round();
+</script>
+</body></html>`;
+
+/**
  * Ceiling for `repeatForMs`. A page that holds its thread forever survives the
  * capture that asked for it and wedges whatever runs next in the same tab.
  */
 const MAX_REPEAT_FOR_MS = 30_000;
 const MAX_DELAY_MS = 120_000;
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
+/**
+ * Ceilings for `/fetch-storm`. Ten bodies at once already keeps a consumer
+ * permanently behind, and more only makes the page slow to stop. `i` just has
+ * to outnumber the requests one storm can send before `MAX_REPEAT_FOR_MS`.
+ */
+const MAX_STORM_BURST = 10;
+const MAX_STORM_REQUESTS = 1_000_000;
 
 /**
  * Ceiling for `/large-storage`, as a total across both areas.
@@ -974,6 +1017,29 @@ export function buildFixture(): FastifyInstance {
     },
   );
 
+  app.get<{ Querystring: { bytes?: number; everyMs?: number; burst?: number; forMs?: number } }>(
+    "/fetch-storm",
+    {
+      // The same floor as `/ticker`: a round every 0 ms is a page that never
+      // yields, which is `/block-main-thread`'s observation and not this one.
+      schema: {
+        querystring: numbers({
+          bytes: [0, MAX_BODY_BYTES],
+          everyMs: [10, MAX_REPEAT_FOR_MS],
+          burst: [1, MAX_STORM_BURST],
+          forMs: [0, MAX_REPEAT_FOR_MS],
+        }),
+      },
+    },
+    (request, reply) => {
+      const bytes = request.query.bytes ?? 5_000_000;
+      const everyMs = request.query.everyMs ?? 40;
+      const burst = request.query.burst ?? 3;
+      const forMs = request.query.forMs ?? MAX_REPEAT_FOR_MS;
+      return reply.type("text/html").send(fetchStormHtml(bytes, everyMs, burst, forMs));
+    },
+  );
+
   app.get<{ Params: { code: number } }>(
     "/http-status/:code",
     { schema: { params: numbers({ code: [100, 599] }, ["code"]) } },
@@ -1199,6 +1265,27 @@ export function buildFixture(): FastifyInstance {
     (request, reply) => {
       const bytes = request.query.bytes ?? 1_048_576;
       return reply.type("text/plain").send("a".repeat(bytes));
+    },
+  );
+
+  // `bytes` bytes of "a", gzipped: a few kilobytes on the wire, `bytes` once the
+  // browser has decoded it. Only the last size is kept. `/fetch-storm` asks for
+  // one size dozens of times a second, and a cache per size would grow with
+  // every caller that ever picked a new one.
+  let compressed: { bytes: number; body: Buffer } | undefined;
+  app.get<{ Querystring: { bytes?: number; i?: number } }>(
+    "/compressible-body",
+    { schema: { querystring: numbers({ bytes: [0, MAX_BODY_BYTES], i: [0, MAX_STORM_REQUESTS] }) } },
+    (request, reply) => {
+      const bytes = request.query.bytes ?? 1_048_576;
+      if (compressed?.bytes !== bytes) {
+        compressed = { bytes, body: gzipSync(Buffer.alloc(bytes, "a")) };
+      }
+      return reply
+        .header("content-encoding", "gzip")
+        .header("cache-control", "no-store")
+        .type("text/plain")
+        .send(compressed.body);
     },
   );
 
