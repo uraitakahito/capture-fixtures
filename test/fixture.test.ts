@@ -1,5 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { runInNewContext } from "node:vm";
+import { gunzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -145,6 +146,30 @@ describe("controllable responses", () => {
   it("/slow-body trickles the requested number of bytes", async () => {
     const res = await fetchOk(app, "/slow-body?bytes=50&overMs=0");
     expect(res.rawPayload.length).toBe(50);
+  });
+
+  it("/compressible-body is small on the wire and the requested size once decoded", async () => {
+    const res = await fetchOk(app, "/compressible-body?bytes=5000000&i=7");
+    expect(res.headers["content-encoding"]).toBe("gzip");
+    expect(res.headers["cache-control"]).toBe("no-store");
+    // The gap between the two sizes is the whole point: a consumer's check on
+    // the wire size passes this body, and its check on the decoded size does
+    // not. `/large-body` is the same size on both sides and cannot do that.
+    expect(res.rawPayload.length).toBeLessThan(50_000);
+    expect(Number(res.headers["content-length"])).toBe(res.rawPayload.length);
+    const decoded = gunzipSync(res.rawPayload);
+    expect(decoded.length).toBe(5_000_000);
+    expect(decoded.subarray(0, 4).toString()).toBe("aaaa");
+  });
+
+  it("/compressible-body serves a second size after the first, and the first again", async () => {
+    // Only the last size is cached. Asking for another must not hand back the
+    // cached one, in either direction.
+    const sizes = [1000, 2000, 1000];
+    for (const bytes of sizes) {
+      const res = await fetchOk(app, `/compressible-body?bytes=${String(bytes)}`);
+      expect(gunzipSync(res.rawPayload).length).toBe(bytes);
+    }
   });
 
   /**
@@ -414,6 +439,52 @@ describe("settle signals", () => {
     const res = await fetchOk(app, "/ticker");
     expect(res.body).toContain("Date.now() + 30000");
     expect(res.body).toContain("setTimeout(tick, 250);");
+  });
+
+  it("/fetch-storm starts `burst` fetches of /compressible-body every `everyMs`, each with its own i", async () => {
+    const res = await fetchOk(app, "/fetch-storm?bytes=5000000&everyMs=40&burst=3&forMs=900");
+    expect(res.body).toContain('fetch("/compressible-body?bytes=5000000&i=" + i)');
+    expect(res.body).toContain("b < 3;");
+    expect(res.body).toContain("setTimeout(round, 40);");
+    expect(res.body).toContain("Date.now() + 900");
+    // The page keeps its own deadline, like `/ticker`.
+    expect(res.body).not.toContain("setInterval");
+  });
+
+  it("/fetch-storm defaults to 5 MB, three at a time, every 40 ms, up to the 30-second ceiling", async () => {
+    const res = await fetchOk(app, "/fetch-storm");
+    expect(res.body).toContain("/compressible-body?bytes=5000000&i=");
+    expect(res.body).toContain("b < 3;");
+    expect(res.body).toContain("setTimeout(round, 40);");
+    expect(res.body).toContain("Date.now() + 30000");
+  });
+
+  it("/fetch-storm's script asks for the URLs it says it does, one i per request", async () => {
+    // Run the page's script against a fake clock and a fake fetch. Reading the
+    // source back proves the text; this proves what it does with it.
+    const res = await fetchOk(app, "/fetch-storm?bytes=1000&everyMs=50&burst=2&forMs=120");
+    const script = /<script>([\s\S]*?)<\/script>/.exec(res.body)?.[1] ?? "";
+    const asked: string[] = [];
+    const later: (() => void)[] = [];
+    let now = 0;
+    runInNewContext(script, {
+      Date: { now: () => now },
+      document: { title: "" },
+      fetch: (url: string) => {
+        asked.push(url);
+        return Promise.resolve({ arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) });
+      },
+      setTimeout: (fn: () => void) => {
+        later.push(fn);
+      },
+    });
+    // Rounds at 0, 50 and 100 ms; the one at 150 ms is past `forMs` and asks nothing.
+    for (const at of [50, 100, 150]) {
+      now = at;
+      later.shift()?.();
+    }
+    expect(asked).toEqual([1, 2, 3, 4, 5, 6].map((i) => `/compressible-body?bytes=1000&i=${String(i)}`));
+    expect(later).toEqual([]);
   });
 });
 
@@ -841,6 +912,12 @@ describe("malformed scenario parameters", () => {
     ["fetch-late takesMs over the ceiling", "/fetch-late?takesMs=999999999"],
     ["ticker periodMs below the floor", "/ticker?periodMs=0"],
     ["ticker forMs over the ceiling", "/ticker?forMs=999999"],
+    ["compressible-body bytes not a number", "/compressible-body?bytes=abc"],
+    ["compressible-body bytes over the ceiling", "/compressible-body?bytes=999999999"],
+    ["fetch-storm everyMs below the floor", "/fetch-storm?everyMs=0"],
+    ["fetch-storm burst of none", "/fetch-storm?burst=0"],
+    ["fetch-storm burst over the ceiling", "/fetch-storm?burst=11"],
+    ["fetch-storm forMs over the ceiling", "/fetch-storm?forMs=999999"],
     ["fan-out n not a number", "/links/fan-out?n=abc"],
     ["fan-out n over the ceiling", "/links/fan-out?n=99999"],
     ["leaf id not a number", "/links/leaf/abc"],
@@ -878,6 +955,9 @@ describe("malformed scenario parameters", () => {
     ["/links/js-late?afterMs=0", 200],
     ["/fetch-late?afterMs=0&takesMs=0", 200],
     ["/ticker?periodMs=10&forMs=0", 200],
+    ["/compressible-body?bytes=0", 200],
+    ["/compressible-body?bytes=100&i=1000000", 200],
+    ["/fetch-storm?bytes=0&everyMs=10&burst=10&forMs=0", 200],
     ["/links/fan-out?n=0", 200],
     ["/links/leaf/200", 200],
     ["/marked/page/secret?tag=t1", 200],

@@ -25,6 +25,7 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive/test/e2e/sites.e2e.test.ts       markedPage(…, "secret", { embedOrigin })   ← see below
  *   browserhive/test/e2e/deny.e2e.test.ts        markedPopup, markedKinds, markedWorker, markedWebSocket,
  *                                                markedSocket, markedAsset("worker.js", …)   ← see below
+ *   browserhive/test/e2e/stop-under-load.e2e.test.ts  fetchStorm(5_000_000, 40, 3)   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -55,6 +56,12 @@ import { scenarios } from "../src/scenarios.js";
  * WebSocket pages were written for BrowserHive's test that a request its policy
  * denies never leaves the capturing machine, which lands with its next release.
  *
+ * So is the storm row (2026-10-02): `/fetch-storm` and `/compressible-body` were
+ * written for BrowserHive's test that stopping a recording while response
+ * bodies are still being read back leaves an archive that agrees with itself.
+ * The page asks for the body itself, with an `i` that counts up from 1; the row
+ * below spells a value far past what one capture reaches.
+ *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
  * not about whatever BrowserHive passes today.
@@ -83,6 +90,8 @@ describe("values BrowserHive passes today", () => {
     ["ticker with the defaults", scenarios.ticker()],
     ["ticker for 1.5s, then still", scenarios.ticker(250, 1500)],
     ["blockMainThread 100ms held, 1.2s repeated", scenarios.blockMainThread(100, 1200)],
+    ["fetchStorm 5 MB, three every 40 ms", scenarios.fetchStorm(5_000_000, 40, 3)],
+    ["compressibleBody as the storm asks for it", `${scenarios.compressibleBody(5_000_000)}&i=3000`],
     ["markedPage secret", scenarios.markedPage("secret", "e7")],
     ["markedPage public embedding secret", scenarios.markedPage("public", "e13", "secret")],
     ["markedPopup secret", scenarios.markedPopup("secret", "d6")],

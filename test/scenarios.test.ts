@@ -15,6 +15,11 @@ describe("scenarios URL contract", () => {
     expect(scenarios.fetchLate(0, 5000)).toBe("/fetch-late?afterMs=0&takesMs=5000");
     expect(scenarios.ticker()).toBe("/ticker?periodMs=250&forMs=30000");
     expect(scenarios.ticker(50, 100)).toBe("/ticker?periodMs=50&forMs=100");
+    expect(scenarios.compressibleBody(5_000_000)).toBe("/compressible-body?bytes=5000000");
+    expect(scenarios.fetchStorm(5_000_000, 40, 3)).toBe(
+      "/fetch-storm?bytes=5000000&everyMs=40&burst=3&forMs=30000",
+    );
+    expect(scenarios.fetchStorm(1000, 50, 2, 120)).toBe("/fetch-storm?bytes=1000&everyMs=50&burst=2&forMs=120");
     expect(scenarios.asset("hero.svg")).toBe("/assets/hero.svg");
     expect(scenarios.markedPage("secret", "e7")).toBe("/marked/page/secret?tag=e7");
     expect(scenarios.markedPage("public", "e13", "secret")).toBe("/marked/page/public?tag=e13&embed=secret");
@@ -79,6 +84,8 @@ describe("every scenario reaches the fixture", () => {
     ["blockMainThread", scenarios.blockMainThread(10, 20)],
     ["fetchLate", scenarios.fetchLate(0, 50)],
     ["ticker", scenarios.ticker(50, 100)],
+    ["compressibleBody", scenarios.compressibleBody(256)],
+    ["fetchStorm", scenarios.fetchStorm(256, 50, 2, 100)],
     ["linkLeaf", scenarios.linkLeaf(1)],
     ["linkJsLate", scenarios.linkJsLate(50)],
     ["linkCycle", scenarios.linkCycle("a")],

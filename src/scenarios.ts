@@ -83,6 +83,16 @@ export const scenarios = {
   /** Responds with a body of `bytes` bytes — exercises response-size caps. */
   largeBody: (bytes: number): string => `/large-body?bytes=${String(bytes)}`,
   /**
+   * `bytes` bytes that travel as a few kilobytes of gzip — small on the wire,
+   * large once decoded.
+   *
+   * {@link scenarios.largeBody} is the same size on both sides, so a consumer
+   * that checks the wire size first never reads the body back at all. This one
+   * passes that check and fails the next: the consumer has to fetch the body
+   * to learn it is too large.
+   */
+  compressibleBody: (bytes: number): string => `/compressible-body?bytes=${String(bytes)}`,
+  /**
    * Fills both web storage areas until they total `bytes` — exercises the caps
    * a consumer puts on the storage values it records.
    *
@@ -139,6 +149,18 @@ export const scenarios = {
    */
   ticker: (periodMs = 250, forMs = 30_000): string =>
     `/ticker?periodMs=${String(periodMs)}&forMs=${String(forMs)}`,
+  /**
+   * Starts `burst` fetches of {@link scenarios.compressibleBody} every
+   * `everyMs`, for `forMs` — a page whose response bodies are still being read
+   * back when a consumer stops recording.
+   *
+   * Each request carries its own `i`, so an archive can be checked request by
+   * request: every one the consumer saw should end as exactly one thing, a
+   * recorded exchange or a note that it was cut off. `forMs` defaults to the
+   * fixture's 30-second ceiling.
+   */
+  fetchStorm: (bytes: number, everyMs: number, burst: number, forMs = 30_000): string =>
+    `/fetch-storm?bytes=${String(bytes)}&everyMs=${String(everyMs)}&burst=${String(burst)}&forMs=${String(forMs)}`,
   /**
    * Three same-origin links to {@link scenarios.linkLeaf} — the crawl baseline.
    *
