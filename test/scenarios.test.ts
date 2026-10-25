@@ -90,6 +90,7 @@ describe("every scenario reaches the fixture", () => {
     ["linkJsLate", scenarios.linkJsLate(50)],
     ["linkCycle", scenarios.linkCycle("a")],
     ["linkFanOut", scenarios.linkFanOut(3)],
+    ["linkTrap", scenarios.linkTrap(1)],
     ["markedPage", scenarios.markedPage("secret", "contract")],
     ["markedText", scenarios.markedText("secret", "contract")],
     ["markedServerRedirect", scenarios.markedServerRedirect(1, "secret", "contract")],

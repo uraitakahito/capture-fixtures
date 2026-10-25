@@ -133,6 +133,11 @@ describe("values BrowserHive passes today", () => {
  *
  * The crawl e2e seeds `/links/hub` and lets the crawler find the rest, so the
  * values below are the ones it passes directly, not every page it visits.
+ *
+ * The rules row is that shape again (2026-10-25): the e2e that starts a crawl
+ * with a rule list seeds `/links/rules`. Both crawl e2e suites live in
+ * capture-scheduler now, but they run against the fixtures capture-ledger's
+ * stack builds from its pin — so that pin is still the one this block guards.
  */
 describe("values capture-ledger's crawl e2e passes today", () => {
   let app: ReturnType<typeof buildFixture>;
@@ -151,6 +156,7 @@ describe("values capture-ledger's crawl e2e passes today", () => {
     ["linkJsLate(60000) — past every settle window", scenarios.linkJsLate(60_000)],
     ["linkLeaf(1)", scenarios.linkLeaf(1)],
     ["linkCycle a", scenarios.linkCycle("a")],
+    ["linkRules", scenarios.linkRules],
   ])("%s is not refused", async (name, path) => {
     expect((await app.inject(path)).statusCode, `${name} → ${path}`).not.toBe(400);
   });

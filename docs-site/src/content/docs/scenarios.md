@@ -429,6 +429,37 @@ The one generated page here. A budget is the only link behaviour that needs more
 pages than a reader would want written out; everything else is a hand-written
 control.
 
+### `/links/rules` — one link for each way a rule decides
+
+Four links: `/links/leaf/1`, `/links/trap/1`, `http://skipped.invalid/page` and
+`http://outside.invalid/page`.
+
+Written for a crawler that takes a list of rules and decides each link by the
+first rule it matches. Started with
+
+```json
+[{ "skip": "skipped.invalid" }, { "skip": "<origin>/links/trap/" },
+ { "follow": "same-host" }, { "capture": "any" }]
+```
+
+it requests the leaf, never the trap, tries `outside.invalid` once and never
+tries `skipped.invalid`.
+
+The trap is skipped by URL prefix and `skipped.invalid` by domain, so the page
+tells the two kinds of skip apart as well as skip from follow and capture. Both
+foreign hosts are `.invalid`, so neither request can ever reach this fixture:
+"tried" shows up only as a failure in the crawler's own report, and the request
+log here answers for the leaf and the trap alone.
+
+### `/links/trap/:n` — a calendar with no end in sight
+
+Day `n` links to day `n + 1`, up to day 20, which links to nothing. Any other
+`n` is a 400.
+
+Every day is a new URL on the same host, so a same-host rule alone walks it until
+the depth cap stops it — and then reports the cap as the reason. The calendar
+ends at day 20 so a crawler with no cap at all still finishes.
+
 ### `/links/hidden` — reachable, linked, and forbidden
 
 A plain page, linked from the hub and disallowed by `/robots.txt`.

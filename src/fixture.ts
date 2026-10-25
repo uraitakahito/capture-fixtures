@@ -393,6 +393,41 @@ const LINK_HIDDEN_HTML = `<!doctype html><html><head><meta charset="utf-8"><titl
 </body></html>`;
 
 /**
+ * One link for each way a crawl rule can decide.
+ *
+ * With the rules
+ *   [{ skip: "skipped.invalid" }, { skip: "<origin>/links/trap/" }, { follow: "same-host" }, { capture: "any" }]
+ * a crawler requests `/links/leaf/1`, never `/links/trap/*`, tries
+ * `outside.invalid` once and never tries `skipped.invalid`.
+ *
+ * Both foreign hosts are `.invalid`, as on `/links/off-origin`, so "tried" is a
+ * fetch that fails rather than a stranger's server. That is also why the two are
+ * told apart by the crawler's own failures, not by the request log here: neither
+ * request can ever arrive.
+ */
+const LINK_RULES_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>rules</title></head><body>
+<h1>rules</h1>
+<a href="/links/leaf/1">same host (follow)</a>
+<a href="/links/trap/1">calendar trap (skip by prefix)</a>
+<a href="http://skipped.invalid/page">excluded domain (skip)</a>
+<a href="http://outside.invalid/page">outside (capture only)</a>
+</body></html>`;
+
+/**
+ * A calendar: day `n` links to day `n + 1`, and the last day to nothing.
+ *
+ * Every day is a new URL on the same host, so without a prefix rule only the
+ * depth cap stops a crawler — and it stops there, reporting the cap rather than
+ * the trap. The calendar ends at `MAX_HOPS` so a crawler with no cap at all
+ * still finishes.
+ */
+const linkTrapHtml = (n: number): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>trap ${String(n)}</title></head><body>
+<h1>day ${String(n)}</h1>
+${n < MAX_HOPS ? `<a href="/links/trap/${String(n + 1)}">next day</a>` : ""}
+</body></html>`;
+
+/**
  * A marked page — see `src/marked.ts` for why the tokens go where they go.
  *
  * The image and the fetch carry `from=<name>`, so when one marked page embeds
@@ -951,6 +986,7 @@ export function buildFixture(): FastifyInstance {
     reply.type("text/html").send(LINK_FRAGMENTS_HTML));
   app.get("/links/js", (_request, reply) => reply.type("text/html").send(LINK_JS_HTML));
   app.get("/links/hidden", (_request, reply) => reply.type("text/html").send(LINK_HIDDEN_HTML));
+  app.get("/links/rules", (_request, reply) => reply.type("text/html").send(LINK_RULES_HTML));
 
   // Served from a route rather than `site/`, which is mounted under /assets/.
   // A crawler asks for /robots.txt at the root or not at all.
@@ -1063,6 +1099,12 @@ export function buildFixture(): FastifyInstance {
     "/links/leaf/:id",
     { schema: { params: numbers({ id: [1, MAX_LEAF_ID] }, ["id"]) } },
     (_request, reply) => reply.type("text/html").send(LINK_LEAF_HTML),
+  );
+
+  app.get<{ Params: { n: number } }>(
+    "/links/trap/:n",
+    { schema: { params: numbers({ n: [1, MAX_HOPS] }, ["n"]) } },
+    (request, reply) => reply.type("text/html").send(linkTrapHtml(request.params.n)),
   );
 
   app.get<{ Querystring: { afterMs?: number } }>(
