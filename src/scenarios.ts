@@ -232,6 +232,25 @@ export const scenarios = {
    * needs more pages than a reader would want to see written out.
    */
   linkFanOut: (n: number): string => `/links/fan-out?n=${String(n)}`,
+  /**
+   * One link for each way a crawl rule can decide — follow, skip by prefix,
+   * skip by domain, capture only.
+   *
+   * With `[{ skip: "skipped.invalid" }, { skip: "<origin>/links/trap/" },
+   * { follow: "same-host" }, { capture: "any" }]` a crawler requests
+   * {@link scenarios.linkLeaf} `(1)`, never {@link scenarios.linkTrap}, tries
+   * `outside.invalid` once and never tries `skipped.invalid`. Both foreign hosts
+   * are `.invalid`, so the last two show up in the crawler's failures, never in
+   * the request log here.
+   */
+  linkRules: "/links/rules",
+  /**
+   * Day `n` of a calendar that links to day `n + 1`, up to day 20.
+   *
+   * A crawler that cannot skip by URL prefix walks it until the depth cap stops
+   * it, then reports the cap as the reason.
+   */
+  linkTrap: (n: number): string => `/links/trap/${String(n)}`,
   /** Reachable, linked from {@link scenarios.linkHub}, and forbidden by {@link scenarios.robotsTxt}. */
   linkHidden: "/links/hidden",
   /**

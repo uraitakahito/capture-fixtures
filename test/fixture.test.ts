@@ -616,6 +616,26 @@ describe("link scenarios", () => {
     expect(res.body).not.toContain("<a ");
   });
 
+  it("/links/rules carries one link for each way a rule can decide", async () => {
+    const res = await fetchOk(app, "/links/rules");
+    expect(res.body).toContain('href="/links/leaf/1"');
+    expect(res.body).toContain('href="/links/trap/1"');
+    expect(res.body).toContain('href="http://skipped.invalid/page"');
+    expect(res.body).toContain('href="http://outside.invalid/page"');
+    // A consumer asserts one hit per rule. A fifth link would land on one of
+    // them and turn that count into two.
+    expect(res.body.match(/<a href=/g)).toHaveLength(4);
+  });
+
+  it("/links/trap/:n links to the next day, and the last day to nothing", async () => {
+    const first = await fetchOk(app, "/links/trap/1");
+    expect(first.body).toContain('href="/links/trap/2"');
+
+    // The calendar has to end, or a crawler with no depth cap never finishes.
+    const last = await fetchOk(app, "/links/trap/20");
+    expect(last.body).not.toContain("<a ");
+  });
+
   it("/robots.txt forbids the hidden page and asks for a delay that can be seen", async () => {
     const res = await fetchOk(app, "/robots.txt");
 
@@ -923,6 +943,9 @@ describe("malformed scenario parameters", () => {
     ["leaf id not a number", "/links/leaf/abc"],
     ["leaf id below the range", "/links/leaf/0"],
     ["cycle side that is neither", "/links/cycle/c"],
+    ["trap day not a number", "/links/trap/abc"],
+    ["trap day below the range", "/links/trap/0"],
+    ["trap day past the last", "/links/trap/21"],
     ["marked name with an uppercase letter", "/marked/page/Secret?tag=t1"],
     ["marked page without a tag", "/marked/page/secret"],
     ["marked tag with markup in it", "/marked/page/secret?tag=%3Cb%3E"],
@@ -960,6 +983,7 @@ describe("malformed scenario parameters", () => {
     ["/fetch-storm?bytes=0&everyMs=10&burst=10&forMs=0", 200],
     ["/links/fan-out?n=0", 200],
     ["/links/leaf/200", 200],
+    ["/links/trap/20", 200],
     ["/marked/page/secret?tag=t1", 200],
     ["/marked/server-redirect/1/secret?tag=t1", 302],
     ["/marked/server-redirect/20/secret?tag=t1", 302],
