@@ -595,11 +595,52 @@ this fixture serves plain http.
 `pixel.svg`, `data.json` (a beacon's POST to it is answered with 204), the
 worker's `worker.js`, and the link target. None of them carries a token.
 
+## Text a consumer has to keep as bytes
+
+For consumers that archive what a server sent, byte for byte. A browser turns
+text into characters before anything else sees it, so a consumer that reads a
+body back as characters and writes it out as UTF-8 has changed it: invisibly
+for UTF-8, plainly for anything else. These bodies are written so that the
+change shows — Shift_JIS declared in the header, and UTF-8 with no charset at
+all, which a browser handing a fetched body back as text reads as
+windows-1252.
+
+Every body is served from one table, exported as `CHARSET_FIXTURES`, so a test
+compares an archive against the bytes that were sent rather than against a
+copy of them:
+
+```ts file="src/charset.ts#charset-fixtures"
+```
+
+### `/charset/` — one page that reads all of them
+
+Two stylesheets (one of them `@import`s `nocharset.css`), the Shift_JIS
+document in an iframe, `fetch()` of `sjis.css`, `nocharset.css`, `sjis.txt`,
+`nocharset.txt` and `gzip.css`, and a POST to `/charset/echo`. The title
+becomes `charset read` once every read has settled.
+
+`nocharset.css` is a shape a real page produced: one stylesheet, read once
+through `@import`, where `@charset` says UTF-8, and once through `fetch()`,
+where only the header speaks and it says nothing. An archive that changed the
+text keeps two different copies of one file. Everything is sent `no-store`, so
+the stylesheet and the fetch are two requests every time.
+
+The page itself and `import.css` come back unchanged whatever a consumer does
+— UTF-8 said in a meta tag, and nothing but ASCII — so they are the comparison
+that has to pass either way.
+
+### `/charset/echo` — what a POST carried
+
+The page POSTs `CHARSET_ECHO.body`, Shift_JIS labelled as Shift_JIS. The route
+reads the body as bytes and answers 204, and the request's entry in
+`/__requests` carries `bodySha256` and `bodyBytes`: what arrived, to compare
+with what a consumer recorded as the request's body.
+
 ## Introspection
 
-Two test-only endpoints. They exist because *how many times* something was
-requested is often the actual assertion — a retry test that only checks the
-final status cannot tell one retry from five.
+Three test-only endpoints. They exist because *how many times* something was
+requested, and with what, is often the actual assertion — a retry test that
+only checks the final status cannot tell one retry from five.
 
 ### `GET /__request-counts`
 
@@ -612,6 +653,18 @@ Request count per URL, as a plain object:
 Keyed by **full URL including the query string**, so `/fails-then-succeeds?failTimes=2&key=a` and
 `/fails-then-succeeds?failTimes=2&key=b` count separately — the same isolation `key` gives you for
 the failure counter.
+
+### `GET /__requests`
+
+The last `REQUEST_LOG_LIMIT` requests, oldest first, as a `RequestLog`:
+`{ requests, truncated }`. Each entry is a `RecordedRequest` — the URL, the
+method, the headers that explain caching (`ifNoneMatch`, `ifModifiedSince`,
+`cacheControl`), `acceptLanguage`, `host`, and, for `/charset/echo`,
+`bodySha256` and `bodyBytes`. `truncated` turns true once the cap has dropped
+something.
+
+To count, use `/__request-counts`: past the cap, this log is no longer
+everything.
 
 ### `POST /__reset`
 
