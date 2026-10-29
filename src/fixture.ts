@@ -7,6 +7,7 @@ import { gzipSync } from "node:zlib";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 
+import { CHARSET_ECHO, CHARSET_FIXTURES } from "./charset.js";
 import { BUILD_INFO } from "./generated/version.js";
 import { MARKED_WINDOW_WAYS, markedTokens, type MarkedWindowWay } from "./marked.js";
 
@@ -844,6 +845,14 @@ export interface RecordedRequest {
    * an iframe from another site was fetched from there.
    */
   host?: string;
+  /**
+   * The SHA-256 (hex) and the length of the body the request carried. Only a
+   * route that reads its body as bytes fills these — {@link CHARSET_ECHO}'s —
+   * so a consumer that records request bodies can compare its copy with what
+   * arrived.
+   */
+  bodySha256?: string;
+  bodyBytes?: number;
 }
 
 /**
@@ -883,9 +892,11 @@ export function buildFixture(): FastifyInstance {
   // The last REQUEST_LOG_LIMIT requests, with headers (/__requests).
   const requests: RecordedRequest[] = [];
   let truncated = false;
+  // The entry each request was logged under, so a route that reads the body can add to it.
+  const logged = new WeakMap<IncomingMessage, RecordedRequest>();
 
-  /** Counts a request and, unless it is introspection, logs it. */
-  const note = (url: string, method: string, headers: IncomingHttpHeaders): void => {
+  /** Counts a request and, unless it is introspection, logs it. Returns the entry it logged. */
+  const note = (url: string, method: string, headers: IncomingHttpHeaders): RecordedRequest | undefined => {
     hits.set(url, (hits.get(url) ?? 0) + 1);
 
     // Introspection endpoints stay out of the log. Reading it must not change
@@ -894,7 +905,7 @@ export function buildFixture(): FastifyInstance {
     //
     // The counter above deliberately keeps counting them: it has always done
     // so, and tests are written against that.
-    if (url.startsWith("/__")) return;
+    if (url.startsWith("/__")) return undefined;
     if (requests.length >= REQUEST_LOG_LIMIT) {
       requests.shift();
       truncated = true;
@@ -905,10 +916,12 @@ export function buildFixture(): FastifyInstance {
       if (typeof value === "string") recorded[field] = value;
     }
     requests.push(recorded);
+    return recorded;
   };
 
   app.addHook("onRequest", (request, _reply, done) => {
-    note(request.url, request.method, request.headers);
+    const recorded = note(request.url, request.method, request.headers);
+    if (recorded !== undefined) logged.set(request.raw, recorded);
     done();
   });
 
@@ -1330,6 +1343,37 @@ export function buildFixture(): FastifyInstance {
         .send(compressed.body);
     },
   );
+
+  // Text whose bytes a consumer has to keep as they were sent (src/charset.ts).
+  // Each body is a Buffer from the table, so nothing re-encodes it on the way
+  // out, and the Content-Type is the table's, word for word. `no-store`, so a
+  // stylesheet and a fetch of the same file are two requests every time.
+  for (const [path, { type, encoding, body }] of Object.entries(CHARSET_FIXTURES)) {
+    const sent = encoding === "gzip" ? gzipSync(body) : body;
+    app.get(path, (_request, reply) => {
+      if (encoding !== undefined) reply.header("content-encoding", encoding);
+      return reply.header("cache-control", "no-store").type(type).send(sent);
+    });
+  }
+
+  // The POST the page sends. No parser here decodes its body: it is read as
+  // bytes, and its digest and length go into the request's log entry.
+  void app.register((scope, _options, registered) => {
+    scope.removeAllContentTypeParsers();
+    scope.addContentTypeParser("*", { parseAs: "buffer" }, (_request, body, done) => {
+      done(null, body);
+    });
+    scope.post<{ Body: Buffer | undefined }>(CHARSET_ECHO.path, (request, reply) => {
+      const body = request.body ?? Buffer.alloc(0);
+      const entry = logged.get(request.raw);
+      if (entry !== undefined) {
+        entry.bodySha256 = createHash("sha256").update(body).digest("hex");
+        entry.bodyBytes = body.length;
+      }
+      return reply.code(204).send();
+    });
+    registered();
+  });
 
   app.get<{ Querystring: { bytes?: number } }>(
     "/large-storage",

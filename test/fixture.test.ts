@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { runInNewContext } from "node:vm";
 import { gunzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { CHARSET_ECHO, CHARSET_FIXTURES } from "../src/charset.js";
 import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
 import { MARKED_KINDS, MARKED_WINDOW_WAYS, markedTokens, type MarkedWindowWay } from "../src/marked.js";
 import { scenarios } from "../src/scenarios.js";
@@ -899,6 +901,65 @@ describe("pages a consumer must not keep", () => {
     expect(result).toBe("error");
     const log = (await (await fetch(`http://127.0.0.1:${String(port)}/__requests`)).json()) as RequestLog;
     expect(log.requests.map((r) => r.url)).toContain("/marked/socket?from=Public&tag=t1");
+  });
+});
+
+describe("text a consumer has to keep as bytes", () => {
+  const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+
+  it("every /charset/ body is sent with the table's Content-Type and bytes, and gzip decodes to the table", async () => {
+    for (const [path, { type, encoding, body }] of Object.entries(CHARSET_FIXTURES)) {
+      const res = await fetchOk(app, path);
+      expect(res.headers["content-type"], path).toBe(type);
+      expect(res.headers["content-encoding"], path).toBe(encoding);
+      const bytes = encoding === "gzip" ? gunzipSync(res.rawPayload) : res.rawPayload;
+      expect(sha256(bytes), path).toBe(sha256(body));
+    }
+  });
+
+  it("the Shift_JIS bodies are not UTF-8, and the bodies without a charset are", () => {
+    const strict = new TextDecoder("utf-8", { fatal: true });
+    for (const [path, { type, body }] of Object.entries(CHARSET_FIXTURES)) {
+      if (type.endsWith("charset=Shift_JIS")) expect(() => strict.decode(body), path).toThrow();
+      else expect(() => strict.decode(body), path).not.toThrow();
+    }
+    // 議 is 8B 63 and 法 is 96 40
+    expect([...CHARSET_FIXTURES["/charset/sjis.txt"].body]).toEqual([0x8b, 0x63, 0x96, 0x40, 0x0a]);
+    expect(strict.decode(CHARSET_FIXTURES["/charset/nocharset.txt"].body)).toBe("議法\n");
+  });
+
+  it("/charset/ reads every other body — stylesheets, @import, the iframe and fetch() — and POSTs the echo body", async () => {
+    const page = (await fetchOk(app, scenarios.charset)).body;
+    const imported = (await fetchOk(app, "/charset/import.css")).body;
+    for (const path of Object.keys(CHARSET_FIXTURES).filter((p) => p !== scenarios.charset)) {
+      expect(page.includes(`"${path}"`) || imported.includes(`'${path}'`), path).toBe(true);
+    }
+    expect(page).toContain(`new Uint8Array([${[...CHARSET_ECHO.body].join(", ")}])`);
+    expect(page).toContain(`"content-type": "${CHARSET_ECHO.type}"`);
+  });
+
+  it("/charset/echo logs the sha256 and the length of the body it received, byte for byte", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: CHARSET_ECHO.path,
+      headers: { "content-type": CHARSET_ECHO.type },
+      payload: CHARSET_ECHO.body,
+    });
+    expect(res.statusCode).toBe(204);
+    const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
+    expect(log.requests.at(-1)).toMatchObject({
+      url: CHARSET_ECHO.path,
+      method: "POST",
+      bodySha256: sha256(CHARSET_ECHO.body),
+      bodyBytes: CHARSET_ECHO.body.length,
+    });
+  });
+
+  it("a request whose body nothing reads as bytes logs no bodySha256", async () => {
+    await fetchOk(app, scenarios.plainHtml);
+    const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
+    expect(log.requests.at(-1)).not.toHaveProperty("bodySha256");
+    expect(log.requests.at(-1)).not.toHaveProperty("bodyBytes");
   });
 });
 

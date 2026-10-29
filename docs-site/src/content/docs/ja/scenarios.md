@@ -562,10 +562,40 @@ service worker のページは無い。
 `pixel.svg`、`data.json`（beacon の POST には 204 を返す）、worker の `worker.js`、リンクの行き先。
 どれも印を持たない。
 
+## バイト列のまま残すべき文字
+
+サーバが送ったものを、バイト列のまま残す消費者のためのもの。
+ブラウザは文字の本文を、ほかの誰かが見る前に文字へ読み替える。
+本文を文字として読み戻して UTF-8 で書き出す消費者は、本文を変えたことになる。UTF-8 なら目に見えず、それ以外ならはっきりと。
+ここの本文は、その変化が見えるように書いてある。ヘッダで Shift_JIS と言う物と、charset を言わない UTF-8 で、後者は、fetch した本文を文字で返すブラウザが windows-1252 として読む。
+
+本文はどれも 1 つの表から送り、その表を `CHARSET_FIXTURES` として export する。
+試験は、写しではなく、送ったバイト列そのものと archive を比べられる。
+
+```ts file="src/charset.ts#charset-fixtures"
+```
+
+### `/charset/` ― 全部を読む 1 枚のページ
+
+スタイルシート 2 つ（片方は `nocharset.css` を `@import` する）、iframe の中の Shift_JIS の文書、`sjis.css`・`nocharset.css`・`sjis.txt`・`nocharset.txt`・`gzip.css` の `fetch()`、`/charset/echo` への POST。
+読み込みが全部済むと、題が `charset read` に変わる。
+
+`nocharset.css` は、実在のページが作った形。1 つのスタイルシートを、`@import`（`@charset` が UTF-8 と言う）と `fetch()`（手掛かりはヘッダだけで、ヘッダは何も言わない）で 2 度読む。
+文字を変える archive は、1 つのファイルの違う写しを 2 つ残す。
+どれも `no-store` で送るので、スタイルシートと fetch は毎回 2 つの要求になる。
+
+ページ自身と `import.css` は、消費者が何をしても変わらない（meta で UTF-8 と言う文書と、ASCII だけの CSS）。比べ方が正しければ、どちらの作りでも通る対照になる。
+
+### `/charset/echo` ― POST が運んだもの
+
+ページは `CHARSET_ECHO.body`（Shift_JIS と名乗った Shift_JIS）を POST する。
+この route は本文をバイト列のまま読んで 204 を返し、`/__requests` のその要求に `bodySha256` と `bodyBytes` を残す。
+届いたものそのものなので、消費者が要求の本文として記録したものと比べられる。
+
 ## イントロスペクション
 
-テスト専用のエンドポイントが 2 つ。
-**「何回リクエストされたか」こそが本当のアサーション**であることが多いために存在します
+テスト専用のエンドポイントが 3 つ。
+**「何回、何でリクエストされたか」こそが本当のアサーション**であることが多いために存在します
 ― 最終ステータスしか見ないリトライテストは、
 1 回のリトライと 5 回のリトライを区別できません。
 
@@ -580,6 +610,14 @@ URL ごとのリクエスト回数を、素のオブジェクトで返します�
 キーは**クエリ文字列を含む完全な URL** です。
 つまり `/fails-then-succeeds?failTimes=2&key=a` と `/fails-then-succeeds?failTimes=2&key=b` は別々に数えられます ―
 失敗カウンタと同じ分離が、ここでも効きます。
+
+### `GET /__requests`
+
+直近の `REQUEST_LOG_LIMIT` 件の要求を、古い順に `RequestLog`（`{ requests, truncated }`）で返します。
+1 件は `RecordedRequest` で、URL・メソッド・キャッシュを説明するヘッダ（`ifNoneMatch`・`ifModifiedSince`・`cacheControl`）・`acceptLanguage`・`host`、`/charset/echo` なら `bodySha256` と `bodyBytes` を持ちます。
+上限で何かを落とすと、`truncated` が true になります。
+
+数えるなら `/__request-counts` を使います。上限を超えると、このログは全部ではなくなります。
 
 ### `POST /__reset`
 

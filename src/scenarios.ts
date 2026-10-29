@@ -371,6 +371,14 @@ export const scenarios = {
   markedAsset: (file: "pixel.svg" | "data.json" | "worker.js", from: string, tag: string): string =>
     `/marked/asset/${file}?from=${from}&tag=${tag}`,
 
+  /**
+   * Reads text whose bytes and whose reading differ — Shift_JIS, and UTF-8 with
+   * no charset — through stylesheets, `@import`, an iframe, `fetch()` and a
+   * POST. `CHARSET_FIXTURES` holds every body it reads, by path, and
+   * `CHARSET_ECHO` what it POSTs.
+   */
+  charset: "/charset/",
+
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */
   asset: (path: string): string => `/assets/${path}`,
 } as const;

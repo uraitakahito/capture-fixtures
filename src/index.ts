@@ -5,6 +5,7 @@ export { buildFixture, REQUEST_LOG_LIMIT } from "./fixture.js";
 // surface as an undefined at 2am.
 export type { RecordedRequest, RequestLog } from "./fixture.js";
 export { scenarios, type Scenarios } from "./scenarios.js";
+export { CHARSET_ECHO, CHARSET_FIXTURES, type CharsetBody, type CharsetPath } from "./charset.js";
 export {
   MARKED_KINDS,
   MARKED_WINDOW_WAYS,
