@@ -636,6 +636,10 @@ reads the body as bytes and answers 204, and the request's entry in
 `/__requests` carries `bodySha256` and `bodyBytes`: what arrived, to compare
 with what a consumer recorded as the request's body.
 
+The page reads the empty answer too. Chrome aborts a fetch whose 204 nobody
+reads (`net::ERR_ABORTED`), and a consumer then sees the POST fail rather than
+finish, with no request body to record.
+
 ## Introspection
 
 Three test-only endpoints. They exist because *how many times* something was

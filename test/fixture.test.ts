@@ -938,6 +938,35 @@ describe("text a consumer has to keep as bytes", () => {
     expect(page).toContain(`"content-type": "${CHARSET_ECHO.type}"`);
   });
 
+  it("/charset/ reads the answer to every fetch, the echo's 204 too, and POSTs the echo body byte for byte", async () => {
+    // Chrome aborts a fetch whose 204 nobody reads (net::ERR_ABORTED), and a recorder
+    // then sees the POST fail, so it never writes the request body a consumer compares.
+    const page = (await fetchOk(app, scenarios.charset)).body;
+    const script = /<script>([\s\S]*?)<\/script>/.exec(page)?.[1];
+    if (script === undefined) throw new Error("the page carries no script");
+    const calls: { url: string; method: string; body: number[]; read: boolean }[] = [];
+    const document = { title: "charset" };
+    runInNewContext(script, {
+      document,
+      fetch: (url: string, init: { method?: string; body?: Uint8Array } = {}) => {
+        const call = { url, method: init.method ?? "GET", body: Array.from(init.body ?? []), read: false };
+        calls.push(call);
+        return Promise.resolve({
+          arrayBuffer: () => {
+            call.read = true;
+            return Promise.resolve(new ArrayBuffer(0));
+          },
+        });
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls.filter((call) => !call.read).map((call) => call.url)).toEqual([]);
+    expect(calls.filter((call) => call.method === "POST")).toEqual([
+      { url: CHARSET_ECHO.path, method: "POST", body: [...CHARSET_ECHO.body], read: true },
+    ]);
+    expect(document.title).toBe("charset read");
+  });
+
   it("/charset/echo logs the sha256 and the length of the body it received, byte for byte", async () => {
     const res = await app.inject({
       method: "POST",
