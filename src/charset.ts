@@ -57,6 +57,11 @@ export const CHARSET_ECHO = {
  * The page. Reads every other body in the table: two stylesheets (one of them
  * `@import`s a third), an iframe, `fetch()` of five more, and a POST of
  * {@link CHARSET_ECHO}. The title changes once every read has settled.
+ *
+ * Every answer is read, the echo's empty one too. Chrome aborts a fetch whose
+ * 204 nobody reads (`net::ERR_ABORTED`, measured in Chrome for Testing 152), and
+ * a recorder then sees the POST fail rather than finish, so it records no
+ * request body to compare.
  */
 const pageHtml = (): string => `<!doctype html>
 <html><head><meta charset="utf-8"><title>charset</title>
@@ -74,7 +79,7 @@ const echo = fetch("${CHARSET_ECHO.path}", {
   method: "POST",
   headers: { "content-type": "${CHARSET_ECHO.type}" },
   body: new Uint8Array([${[...CHARSET_ECHO.body].join(", ")}]),
-});
+}).then((r) => r.arrayBuffer());
 Promise.allSettled([...reads, echo]).then(() => { document.title = "charset read"; });
 </script>
 </body></html>
