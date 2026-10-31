@@ -93,6 +93,19 @@ export const scenarios = {
    */
   compressibleBody: (bytes: number): string => `/compressible-body?bytes=${String(bytes)}`,
   /**
+   * `bytes` bytes that gzip cannot shrink, the same bytes for the same `seed`.
+   * A consumer that gzips each record it writes can count on its file growing
+   * by `bytes` per request — which is what a test of its WARC rollover needs.
+   */
+  warcNoise: (bytes: number, seed: number): string => `/warc/noise?bytes=${String(bytes)}&seed=${String(seed)}`,
+  /**
+   * A page whose `resources` images are {@link scenarios.warcNoise} of `bytes`
+   * each, with seeds 1 … `resources`. Sized so a consumer's WARC rollover
+   * fires: 8 × 250,000 bytes crosses a 1 MiB limit once and leaves two files.
+   */
+  warcRollover: (resources: number, bytes: number): string =>
+    `/warc/rollover?resources=${String(resources)}&bytes=${String(bytes)}`,
+  /**
    * Fills both web storage areas until they total `bytes` — exercises the caps
    * a consumer puts on the storage values it records.
    *

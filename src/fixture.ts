@@ -722,6 +722,15 @@ const MAX_BODY_BYTES = 64 * 1024 * 1024;
  */
 const MAX_STORM_BURST = 10;
 const MAX_STORM_REQUESTS = 1_000_000;
+/**
+ * Ceilings for `/warc/noise` and `/warc/rollover`. A seed is any positive
+ * 32-bit integer. `resources` and `bytes` only have to let one page cross a
+ * consumer's WARC rollover a few times: BrowserHive's e2e stack rolls over at
+ * 1 MiB, and 64 images of 8 MiB would cross it hundreds of times.
+ */
+const MAX_NOISE_SEED = 2_147_483_647;
+const MAX_ROLLOVER_RESOURCES = 64;
+const MAX_ROLLOVER_BYTES = 8 * 1024 * 1024;
 
 /**
  * Ceiling for `/large-storage`, as a total across both areas.
@@ -881,6 +890,52 @@ const RECORDED_HEADERS = [
   ["accept-language", "acceptLanguage"],
   ["host", "host"],
 ] as const;
+
+/**
+ * `bytes` bytes of xorshift32 output, seeded with `seed`.
+ *
+ * Two properties matter, and `/large-body` has neither. The bytes do not
+ * compress: a consumer that gzips each record it writes sees its file grow by
+ * `bytes` per request, so a test can predict where a rollover lands. And the
+ * same seed gives the same bytes on every call, so a digest recorded today
+ * matches one recorded tomorrow.
+ */
+export const noise = (bytes: number, seed: number): Buffer => {
+  const out = Buffer.allocUnsafe(bytes);
+  let x = seed >>> 0;
+  for (let i = 0; i < bytes; i += 1) {
+    x ^= x << 13;
+    x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    x >>>= 0;
+    out[i] = x & 0xff;
+  }
+  return out;
+};
+
+/**
+ * A page whose only weight is `resources` images of `bytes` each, every one a
+ * different {@link noise} — so the WARC a consumer writes for it grows by about
+ * `resources × bytes`, in steps of `bytes`, and the point at which the
+ * consumer's rollover fires can be worked out from the two numbers.
+ *
+ * `<img>` rather than `fetch()`: the browser requests every image before the
+ * page is done loading, with no script and nothing for a settle wait to
+ * outlast. That the bytes are not an image does not stop the request; the
+ * decode fails after the response has been recorded.
+ */
+const rolloverHtml = (resources: number, bytes: number): string => {
+  const images = Array.from(
+    { length: resources },
+    (_, i) =>
+      `<img src="/warc/noise?bytes=${String(bytes)}&amp;seed=${String(i + 1)}" width="8" height="8" alt="noise ${String(i + 1)}">`,
+  ).join("\n");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>warc rollover</title></head><body>
+<h1>${String(resources)} × ${String(bytes)} bytes</h1>
+${images}
+</body></html>`;
+};
 
 export function buildFixture(): FastifyInstance {
   const app = Fastify();
@@ -1342,6 +1397,30 @@ export function buildFixture(): FastifyInstance {
         .type("text/plain")
         .send(compressed.body);
     },
+  );
+
+  // Bytes that gzip does not shrink, the same for the same seed. `/large-body`
+  // is "a" repeated, which a consumer that gzips what it records turns into a
+  // few hundred bytes — its file never grows, and a rollover tied to file size
+  // never fires. `no-store`, so a repeat visit is a request, not a 304.
+  app.get<{ Querystring: { bytes?: number; seed?: number } }>(
+    "/warc/noise",
+    { schema: { querystring: numbers({ bytes: [1, MAX_BODY_BYTES], seed: [1, MAX_NOISE_SEED] }) } },
+    (request, reply) =>
+      reply
+        .type("application/octet-stream")
+        .header("cache-control", "no-store")
+        .send(noise(request.query.bytes ?? 250_000, request.query.seed ?? 1)),
+  );
+
+  // The page that makes a consumer's WARC rollover fire. Defaults to
+  // 8 × 250,000 bytes: past a 1 MiB rollover once, with the second file well
+  // short of a second one.
+  app.get<{ Querystring: { resources?: number; bytes?: number } }>(
+    "/warc/rollover",
+    { schema: { querystring: numbers({ resources: [1, MAX_ROLLOVER_RESOURCES], bytes: [1, MAX_ROLLOVER_BYTES] }) } },
+    (request, reply) =>
+      reply.type("text/html").send(rolloverHtml(request.query.resources ?? 8, request.query.bytes ?? 250_000)),
   );
 
   // Text whose bytes a consumer has to keep as they were sent (src/charset.ts).

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { runInNewContext } from "node:vm";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -1079,5 +1079,45 @@ describe("malformed scenario parameters", () => {
     ["/marked/server-redirect/20/secret?tag=t1", 302],
   ])("still serves %s", async (url, expected) => {
     expect((await app.inject(url)).statusCode).toBe(expected);
+  });
+});
+
+describe("warc rollover pages", () => {
+  it("/warc/noise returns exactly `bytes` bytes that gzip does not shrink", async () => {
+    const res = await fetchOk(app, "/warc/noise?bytes=100000&seed=1");
+    expect(res.headers["content-type"]).toBe("application/octet-stream");
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.rawPayload.length).toBe(100_000);
+    // The whole point: a consumer that gzips each record it writes sees its
+    // file grow by the body's size, not by a few hundred bytes as for "aaaa".
+    expect(gzipSync(res.rawPayload).length).toBeGreaterThan(99_000);
+  });
+
+  it("/warc/noise is the same for the same seed and differs across seeds", async () => {
+    const first = await fetchOk(app, "/warc/noise?bytes=4096&seed=5");
+    const again = await fetchOk(app, "/warc/noise?bytes=4096&seed=5");
+    const other = await fetchOk(app, "/warc/noise?bytes=4096&seed=6");
+    expect(first.rawPayload.equals(again.rawPayload)).toBe(true);
+    expect(first.rawPayload.equals(other.rawPayload)).toBe(false);
+  });
+
+  it("/warc/rollover lists `resources` images of `bytes` bytes with distinct seeds", async () => {
+    const res = await fetchOk(app, "/warc/rollover?resources=5&bytes=123");
+    expect(res.headers["content-type"]).toContain("text/html");
+    const sources = [...res.body.matchAll(/<img src="([^"]+)"/g)].map((m) => m[1]);
+    expect(sources).toEqual([1, 2, 3, 4, 5].map((seed) => `/warc/noise?bytes=123&amp;seed=${String(seed)}`));
+  });
+
+  it("/warc/rollover defaults to 8 × 250,000 bytes", async () => {
+    const res = await fetchOk(app, "/warc/rollover");
+    expect(res.body.match(/<img /g)).toHaveLength(8);
+    expect(res.body).toContain("bytes=250000&amp;seed=8");
+  });
+
+  it("/warc/noise and /warc/rollover answer 400 outside their ranges", async () => {
+    await fetchOk(app, "/warc/noise?bytes=0", 400);
+    await fetchOk(app, "/warc/noise?seed=0", 400);
+    await fetchOk(app, "/warc/rollover?resources=65", 400);
+    await fetchOk(app, "/warc/rollover?bytes=0", 400);
   });
 });
