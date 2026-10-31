@@ -34,6 +34,10 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
+      # Test hostnames use .test; example names answer differently on different networks.
+      - name: Test hostnames
+        run: pnpm run check:test-hosts
+
       - name: Tests
         run: pnpm test
 

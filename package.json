@@ -31,7 +31,8 @@
     "site:preview": "npm --prefix docs-site run preview",
     "site:check": "pnpm run site:build && node scripts/check-doc-refs.mjs",
     "audit": "pnpm audit --audit-level=low && npm audit --prefix docs-site --audit-level=low",
-    "check": "pnpm run audit && pnpm run typecheck && pnpm run lint && pnpm test"
+    "check": "pnpm run audit && pnpm run typecheck && pnpm run lint && pnpm run check:test-hosts && pnpm test",
+    "check:test-hosts": "node scripts/check-test-hosts.mjs"
   },
   "keywords": [
     "fastify",
