@@ -29,3 +29,26 @@ allowBuilds:
 # 4 つの script を書き換えて明示的に呼ぶより、npm と同じ意味論を保つほうが
 # 差分も事故も小さい。
 enablePrePostScripts: true
+
+# 親の範囲を越えて上げる依存。1 件ごとに、なぜ越えるかと、外す条件を書く。
+overrides:
+  # glob: GHSA-3g3m-2fjr-6pw4 (AbortSignal で止めた後も走査が続く) の修正は 14.0.2 からで、13 系には
+  # 無い。@fastify/static は最新の 10.1.8 も glob ^13 を要求する。@fastify/static が glob を呼ぶのは
+  # wildcard: false のときだけで、capture-fixtures は既定 (true) のまま登録している。14 は minimatch 11 を
+  # 連れてくるので、実行時の木の minimatch (GHSA-g3hv-75wg-m249) もこれで消える。
+  # 外す条件: @fastify/static が glob ^14 を要求する版を出したとき。
+  "@fastify/static>glob": "^14.0.2"
+
+# audit から外す勧告。外すのは、上流が修正版を受け取れず、override でも越えられないものだけ。
+# 1 件ごとに、なぜ越えられないかと、外す条件を書く。
+auditConfig:
+  ignoreGhsas:
+    # minimatch: globparts の増幅による DoS。修正は 11.0.1 (2026-10-27) からで、10 系には無い。
+    # 11 は名前付きの書き出し makeRe をやめたので、override で 11 にすると eslint-plugin-import-x が
+    # 読み込みで落ちる (実測。lint が "does not provide an export named 'makeRe'" で止まる)。
+    # eslint 10.14・@eslint/config-array 0.23・@typescript-eslint/typescript-estree 8.72・import-x 4.17 の
+    # 最新版がどれも ^10 を要求する。残る minimatch 10 は lint の道具の中だけで、読むパターンは eslint の
+    # 設定と lint の対象 (この repo の物) だけ。実行時の木 (@fastify/static の下) は上の glob の override で
+    # minimatch 11 になっている (`pnpm audit --prod` はこの行が無くても 0)。
+    # 外す条件: これらの親が ^11 を要求する版を出したとき (そのとき update で直る)。
+    - GHSA-g3hv-75wg-m249
