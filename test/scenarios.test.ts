@@ -16,6 +16,8 @@ describe("scenarios URL contract", () => {
     expect(scenarios.ticker()).toBe("/ticker?periodMs=250&forMs=30000");
     expect(scenarios.ticker(50, 100)).toBe("/ticker?periodMs=50&forMs=100");
     expect(scenarios.compressibleBody(5_000_000)).toBe("/compressible-body?bytes=5000000");
+    expect(scenarios.warcNoise(250_000, 3)).toBe("/warc/noise?bytes=250000&seed=3");
+    expect(scenarios.warcRollover(8, 250_000)).toBe("/warc/rollover?resources=8&bytes=250000");
     expect(scenarios.fetchStorm(5_000_000, 40, 3)).toBe(
       "/fetch-storm?bytes=5000000&everyMs=40&burst=3&forMs=30000",
     );
@@ -85,6 +87,8 @@ describe("every scenario reaches the fixture", () => {
     ["fetchLate", scenarios.fetchLate(0, 50)],
     ["ticker", scenarios.ticker(50, 100)],
     ["compressibleBody", scenarios.compressibleBody(256)],
+    ["warcNoise", scenarios.warcNoise(64, 1)],
+    ["warcRollover", scenarios.warcRollover(2, 64)],
     ["fetchStorm", scenarios.fetchStorm(256, 50, 2, 100)],
     ["linkLeaf", scenarios.linkLeaf(1)],
     ["linkJsLate", scenarios.linkJsLate(50)],

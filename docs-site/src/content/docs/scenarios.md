@@ -281,6 +281,31 @@ stores nothing, so a page can keep a consumer reading for as long as it likes.
 An optional `i` is accepted and ignored. It is there so `/fetch-storm` can give
 every request its own URL.
 
+### `/warc/noise?bytes=&seed=` — bytes that do not compress
+
+`bytes` bytes of pseudo-random data from `seed` (xorshift32), as
+`application/octet-stream` with `no-store`. The same seed always gives the same
+bytes. Defaults to 250,000 bytes from seed 1.
+
+`/large-body` is `a` repeated. A consumer that gzips each record as it writes
+it — every WARC writer does — turns a megabyte of that into a few hundred bytes,
+so its file never grows and a rollover tied to file size never fires. These
+bytes gzip to their own size, so the file grows by `bytes` per request and a
+test can say where the rollover lands.
+
+### `/warc/rollover?resources=&bytes=` — WARC rollover
+
+A page with `resources` images, each `/warc/noise` of `bytes` with its own seed
+(1 … `resources`). Defaults to 8 × 250,000 bytes.
+
+A consumer that splits its WARC at a size limit needs a page that crosses the
+limit a known number of times. With the defaults and a 1 MiB limit the file
+crosses once: four images come to about a megabyte, the fifth takes the file
+past the limit, and the remaining three (750 KB) stay in the second file. The
+images are all the same size, so the order they arrive in does not change the
+count. The bytes are not an image; the browser requests them all the same, and
+the failed decode comes after the response has been recorded.
+
 ### `/slow-body?bytes=&overMs=` — slow bodies
 
 `bytes` bytes trickled over roughly `overMs`, in ten chunks.

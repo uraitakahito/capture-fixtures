@@ -26,6 +26,7 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive/test/e2e/deny.e2e.test.ts        markedPopup, markedKinds, markedWorker, markedWebSocket,
  *                                                markedSocket, markedAsset("worker.js", …)   ← see below
  *   browserhive/test/e2e/stop-under-load.e2e.test.ts  fetchStorm(5_000_000, 40, 3)   ← see below
+ *   browserhive/test/e2e/warc-rollover.e2e.test.ts  warcRollover(8, 250_000)   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -62,6 +63,11 @@ import { scenarios } from "../src/scenarios.js";
  * The page asks for the body itself, with an `i` that counts up from 1; the row
  * below spells a value far past what one capture reaches.
  *
+ * So is the rollover row (2026-10-31): `/warc/rollover` and `/warc/noise` were
+ * written for BrowserHive's test that its recorder starts a new WARC file at a
+ * size limit, which lands with its next release. Eight images of 250,000 bytes
+ * cross that stack's 1 MiB limit exactly once; the row spells those numbers.
+ *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
  * not about whatever BrowserHive passes today.
@@ -92,6 +98,8 @@ describe("values BrowserHive passes today", () => {
     ["blockMainThread 100ms held, 1.2s repeated", scenarios.blockMainThread(100, 1200)],
     ["fetchStorm 5 MB, three every 40 ms", scenarios.fetchStorm(5_000_000, 40, 3)],
     ["compressibleBody as the storm asks for it", `${scenarios.compressibleBody(5_000_000)}&i=3000`],
+    ["warcRollover 8 images of 250,000 bytes", scenarios.warcRollover(8, 250_000)],
+    ["warcNoise as that page asks for it", scenarios.warcNoise(250_000, 8)],
     ["markedPage secret", scenarios.markedPage("secret", "e7")],
     ["markedPage public embedding secret", scenarios.markedPage("public", "e13", "secret")],
     ["markedPopup secret", scenarios.markedPopup("secret", "d6")],
