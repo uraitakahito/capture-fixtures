@@ -316,10 +316,10 @@ describe("introspection", () => {
   it("/__requests keeps the Host, the name a request came in under", async () => {
     // Two instances of this fixture are two sites to a browser only because
     // their names differ. The Host is what shows which one served an iframe.
-    await app.inject({ url: "/plain-html", headers: { host: "capture-fixtures-b.example:8080" } });
+    await app.inject({ url: "/plain-html", headers: { host: "capture-fixtures-b.test:8080" } });
 
     const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
-    expect(log.requests[0]?.host).toBe("capture-fixtures-b.example:8080");
+    expect(log.requests[0]?.host).toBe("capture-fixtures-b.test:8080");
   });
 
   it("/__requests does not record the introspection endpoints themselves", async () => {
@@ -710,7 +710,7 @@ describe("pages a consumer must not keep", () => {
   });
 
   it("embedOrigin serves the iframe from another origin, and moves nothing else", async () => {
-    const origin = "http://capture-fixtures-b.example:8080";
+    const origin = "http://capture-fixtures-b.test:8080";
     const here = await fetchOk(app, scenarios.markedPage("public", "t1", "secret"));
     const there = await fetchOk(app, scenarios.markedPage("public", "t1", "secret", { embedOrigin: origin }));
     expect(there.body).toContain(`<iframe src="${origin}/marked/page/secret?tag=t1"`);
@@ -1040,8 +1040,8 @@ describe("malformed scenario parameters", () => {
     ["marked page without a tag", "/marked/page/secret"],
     ["marked tag with markup in it", "/marked/page/secret?tag=%3Cb%3E"],
     ["marked embed that is not a name", "/marked/page/public?tag=t1&embed=a%2Fb"],
-    ["marked embedOrigin with nothing to embed", "/marked/page/public?tag=t1&embedOrigin=http%3A%2F%2Fb.example"],
-    ["marked embedOrigin with a path", "/marked/page/public?tag=t1&embed=secret&embedOrigin=http%3A%2F%2Fb.example%2Fx"],
+    ["marked embedOrigin with nothing to embed", "/marked/page/public?tag=t1&embedOrigin=http%3A%2F%2Fb.test"],
+    ["marked embedOrigin with a path", "/marked/page/public?tag=t1&embed=secret&embedOrigin=http%3A%2F%2Fb.test%2Fx"],
     ["marked embedOrigin with a quote in it", "/marked/page/public?tag=t1&embed=secret&embedOrigin=http%3A%2F%2Fb%22x"],
     ["marked hops of zero", "/marked/server-redirect/0/secret?tag=t1"],
     ["marked hops over the ceiling", "/marked/server-redirect/21/secret?tag=t1"],
