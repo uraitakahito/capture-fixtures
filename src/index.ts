@@ -9,8 +9,10 @@ export { CHARSET_ECHO, CHARSET_FIXTURES, type CharsetBody, type CharsetPath } fr
 export {
   MARKED_KINDS,
   MARKED_WINDOW_WAYS,
+  markedSearchTokens,
   markedTokens,
   type MarkedKind,
+  type MarkedSearchTokens,
   type MarkedTokens,
   type MarkedWindowWay,
 } from "./marked.js";

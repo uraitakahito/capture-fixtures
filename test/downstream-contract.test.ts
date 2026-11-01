@@ -27,6 +27,7 @@ import { scenarios } from "../src/scenarios.js";
  *                                                markedSocket, markedAsset("worker.js", …)   ← see below
  *   browserhive/test/e2e/stop-under-load.e2e.test.ts  fetchStorm(5_000_000, 40, 3)   ← see below
  *   browserhive/test/e2e/warc-rollover.e2e.test.ts  warcRollover(8, 250_000)   ← see below
+ *   browserhive/test/e2e/snapshots.e2e.test.ts   markedSearch, markedSearchResult, markedSearchAnswer   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -67,6 +68,14 @@ import { scenarios } from "../src/scenarios.js";
  * written for BrowserHive's test that its recorder starts a new WARC file at a
  * size limit, which lands with its next release. Eight images of 250,000 bytes
  * cross that stack's 1 MiB limit exactly once; the row spells those numbers.
+ *
+ * So are the search rows (2026-11-02): `/marked/search` was written for
+ * BrowserHive's test that it keeps a page before and after a script types into
+ * it, which lands with its next release and is being written alongside. The
+ * names are the marked rows' two (`secret` for the page a policy withholds),
+ * the tags are short like theirs, and the query is text with a space and
+ * characters outside ASCII: what a script types is anything, and a pattern
+ * added to `q` would refuse it here first.
  *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
@@ -123,6 +132,10 @@ describe("values BrowserHive passes today", () => {
     ["markedText", scenarios.markedText("secret", "e12")],
     ["markedAsset pixel.svg", scenarios.markedAsset("pixel.svg", "secret", "e7")],
     ["markedAsset data.json", scenarios.markedAsset("data.json", "secret", "e7")],
+    ["markedSearch public", scenarios.markedSearch("public", "sn1")],
+    ["markedSearchResult public", scenarios.markedSearchResult("public", "sn1")],
+    ["markedSearchAnswer with what a script types", scenarios.markedSearchAnswer("public", "sn1", "個人 情報")],
+    ["markedSearch secret", scenarios.markedSearch("secret", "sn4")],
   ])("%s is not refused", async (name, path) => {
     // 404, 503 and 302 are all legitimate answers; 400 means a bound is too
     // tight and the submodule bump would break the downstream suite.

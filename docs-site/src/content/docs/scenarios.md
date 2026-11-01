@@ -615,6 +615,37 @@ GET to the endpoint answers 426.
 There is no service worker page. Registering one needs a secure context, and
 this fixture serves plain http.
 
+### `/marked/search/:name?tag=` — a search that changes the page, not the document
+
+For consumers that act on a page before keeping it — type, press, wait — and
+keep it at more than one moment. Its tokens are its own: the page shows
+`before-<name>-<tag>` as served and `after-<name>-<tag>` once a search is drawn,
+never both. Take the spelling from `markedSearchTokens(name, tag)`.
+
+As served, it holds the before token, a form and an empty `#results`. The form
+has a query field `#q`, a second text field `#token` and a button `#go` that
+submits nothing. Pressing `#go` fetches
+`/marked/search/:name/answer?tag=<tag>&q=<query>`, which answers
+`{ q, mark, items }`: the after token as `mark`, and three results that repeat
+the query. The page draws the results, puts the after token where the before
+token was, keeps the query in localStorage as `marked-search:<name>`, and last
+of all moves its URL to `/marked/search/:name/result?tag=<tag>` with
+`history.pushState`. The document is never replaced, so a consumer that waits
+for the URL to change finds the page already drawn.
+
+Nothing reads `#token`. Its value goes into no request, no URL and no storage,
+so if it turns up in anything a consumer kept, the consumer put it there. A
+value typed into `#q` is the control: it goes into the answer's URL, so it is in
+every archive that recorded the answer.
+
+Both tokens reach an archive by ways other than a copy of the page: the before
+token in the page's response, the after token in the answer's. A test asking
+which moment a copy is from looks in that copy, not in the whole archive.
+
+Opened directly, `/marked/search/:name/result?tag=` serves the page as first
+served, as a single-page application's server does for any of its URLs. It shows
+the before token, not a search's answer.
+
 ### `/marked/asset/*`, `/marked/leaf` — what the page loads and links to
 
 `pixel.svg`, `data.json` (a beacon's POST to it is answered with 204), the

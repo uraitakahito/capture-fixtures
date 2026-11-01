@@ -578,6 +578,28 @@ handshake はほかの要求と同じく要求ログに届き、試験はそれ�
 service worker のページは無い。
 登録には secure context が要り、この fixture は素の http で配っている。
 
+### `/marked/search/:name?tag=` ― 文書は替えず、ページだけを替える検索
+
+残す前にページの中で何かをし（打つ・押す・待つ）、ページを 2 つ以上の時点で残す消費者のためのもの。
+印はこのページだけのもので、配ったページは `before-<name>-<tag>` を、検索の答えを描いた後は `after-<name>-<tag>` を見せる。両方を同時には見せない。
+綴りは書き写さず、`markedSearchTokens(name, tag)` から取る。
+
+配ったページは、検索前の印、form、空の `#results` を持つ。
+form には、検索の欄 `#q`、もう 1 つの文字の欄 `#token`、何も送らないボタン `#go` がある。
+`#go` を押すと `/marked/search/:name/answer?tag=<tag>&q=<検索の語>` を取りに行く。答えは `{ q, mark, items }` で、`mark` が検索後の印、`items` が検索の語を繰り返す 3 つの結果。
+ページは結果を描き、検索前の印の所に検索後の印を置き、検索の語を localStorage に `marked-search:<name>` として置き、最後に `history.pushState` で URL を `/marked/search/:name/result?tag=<tag>` に替える。
+文書は入れ替わらないので、URL が替わるのを待つ消費者には、描き終えたページが見える。
+
+`#token` の値を読むものは無い。値はどの要求にも、URL にも、storage にも入らない。
+消費者が残した物にその値が出たら、入れたのは消費者。
+`#q` に打った値は対照になる。答えの URL に入るので、答えを記録した archive のどれにも在る。
+
+2 つの印は、ページの写し以外の道でも archive に届く。検索前の印はページの応答に、検索後の印は答えの応答に在る。
+写しがどの時点の物かを問う試験は、archive 全体ではなく、その写しの中を探す。
+
+`/marked/search/:name/result?tag=` を直に開くと、最初に配ったページと同じ物が返る。single-page application のサーバが、どの URL にも同じ物を返すのと同じ。
+見えるのは検索前の印で、検索の答えではない。
+
 ### `/marked/asset/*`・`/marked/leaf` ― ページが読むものとリンク先
 
 `pixel.svg`、`data.json`（beacon の POST には 204 を返す）、worker の `worker.js`、リンクの行き先。

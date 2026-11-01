@@ -377,6 +377,35 @@ export const scenarios = {
    */
   markedSocket: (from: string, tag: string): string => `/marked/socket?from=${from}&tag=${tag}`,
   /**
+   * A search that changes the page and never the document, as a single-page
+   * application's does. As served it shows `markedSearchTokens(name, tag).before`
+   * and a form: a query field `#q`, a second text field `#token` and a button
+   * `#go`. Pressing `#go` fetches {@link scenarios.markedSearchAnswer}, draws the
+   * results into `#results`, puts the `after` token where the `before` token was,
+   * keeps the query in localStorage as `marked-search:<name>`, and last of all
+   * moves the URL to {@link scenarios.markedSearchResult} with `pushState`.
+   *
+   * For consumers that keep a page at more than one moment: each copy holds one
+   * of the two tokens. `#token` is read by nothing — its value goes into no
+   * request, no URL and no storage — so if it turns up in what a consumer kept,
+   * the consumer put it there.
+   */
+  markedSearch: (name: string, tag: string): string => `/marked/search/${name}?tag=${tag}`,
+  /**
+   * Where {@link scenarios.markedSearch} moves its URL once a search is drawn.
+   * Opened directly it serves the page as first served — the `before` token,
+   * no answer — as a single-page application's server does for any of its URLs.
+   */
+  markedSearchResult: (name: string, tag: string): string => `/marked/search/${name}/result?tag=${tag}`,
+  /**
+   * The JSON {@link scenarios.markedSearch} fetches for query `q`: `{ q, mark,
+   * items }`, where `mark` is the `after` token and `items` three results that
+   * repeat the query. The query is in this URL, so it reaches every archive that
+   * recorded the answer, whether or not the page was kept.
+   */
+  markedSearchAnswer: (name: string, tag: string, q: string): string =>
+    `/marked/search/${name}/answer?tag=${tag}&q=${encodeURIComponent(q)}`,
+  /**
    * What marked page `from` loads: the image it paints, the JSON its script
    * fetches, and the script a {@link scenarios.markedWorker} page runs in its
    * worker. None carries a token.
