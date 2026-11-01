@@ -59,3 +59,23 @@ export const MARKED_WINDOW_WAYS = ["open", "link", "form", "modifier"] as const;
 
 /** One of {@link MARKED_WINDOW_WAYS}. */
 export type MarkedWindowWay = (typeof MARKED_WINDOW_WAYS)[number];
+
+/** The strings the `/marked/search` page `name` shows under `tag`. */
+export interface MarkedSearchTokens {
+  /** In the page as served. Drawing a search's answer takes it out. */
+  readonly before: string;
+  /** In the search's answer, and in the page once drawn where `before` was. */
+  readonly after: string;
+}
+
+/**
+ * The page shows one or the other, never both, so a consumer that keeps the
+ * page at more than one moment can be asked which moment each copy is from.
+ * Spelled here for the reason {@link markedTokens} is, and written into no URL
+ * for the reason those are: the page's URLs carry `name` and `tag`, never the
+ * two joined.
+ */
+export const markedSearchTokens = (name: string, tag: string): MarkedSearchTokens => ({
+  before: `before-${name}-${tag}`,
+  after: `after-${name}-${tag}`,
+});

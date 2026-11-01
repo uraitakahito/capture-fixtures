@@ -3,11 +3,17 @@ import type { AddressInfo } from "node:net";
 import { runInNewContext } from "node:vm";
 import { gunzipSync, gzipSync } from "node:zlib";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHARSET_ECHO, CHARSET_FIXTURES } from "../src/charset.js";
 import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
-import { MARKED_KINDS, MARKED_WINDOW_WAYS, markedTokens, type MarkedWindowWay } from "../src/marked.js";
+import {
+  MARKED_KINDS,
+  MARKED_WINDOW_WAYS,
+  markedSearchTokens,
+  markedTokens,
+  type MarkedWindowWay,
+} from "../src/marked.js";
 import { scenarios } from "../src/scenarios.js";
 import { fetchOk } from "./helpers.js";
 
@@ -902,6 +908,161 @@ describe("pages a consumer must not keep", () => {
     const log = (await (await fetch(`http://127.0.0.1:${String(port)}/__requests`)).json()) as RequestLog;
     expect(log.requests.map((r) => r.url)).toContain("/marked/socket?from=Public&tag=t1");
   });
+
+  describe("/marked/search/:name — 検索で頁だけが替わり、文書は替わらない", () => {
+    const NAME = "public";
+    const TAG = "t1";
+
+    /** A listener as the page's script registers it. */
+    type Listener = (event: { preventDefault: () => void }) => unknown;
+
+    /**
+     * Runs the page's own script against stand-ins for the parts of a browser it
+     * touches, with `typed` in the two fields, and fires `event`. The fetch is
+     * answered by this fixture, so the answer drawn is the real one. Resolves once
+     * the URL has moved, the page's last step, with what the script did (`steps`,
+     * in order), which fields it read the value of, and whether it kept the
+     * browser from submitting the form.
+     */
+    const runSearch = async (
+      html: string,
+      typed: { q: string; token: string },
+      event: "click #go" | "submit #form",
+    ): Promise<{ steps: string[]; reads: string[]; prevented: boolean }> => {
+      const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
+      if (script === undefined) throw new Error("the page has no script");
+      const steps: string[] = [];
+      const reads: string[] = [];
+      const listeners = new Map<string, Listener>();
+      const element = (id: string): object => ({
+        get value(): string {
+          reads.push(id);
+          return id === "q" ? typed.q : id === "token" ? typed.token : "";
+        },
+        set textContent(text: string) {
+          steps.push(`#${id} ${text}`);
+        },
+        addEventListener: (type: string, listener: Listener) => listeners.set(`${type} #${id}`, listener),
+        replaceChildren: (...children: { textContent: string }[]) =>
+          steps.push(`#${id} ${children.map((child) => child.textContent).join(" | ")}`),
+      });
+      // Only the ids the page actually has. A script that looks for one it does
+      // not have gets null, as in a browser, and fails here rather than there.
+      const elements = new Map([...html.matchAll(/ id="([^"]+)"/g)].map(([, id = ""]) => [id, element(id)]));
+      runInNewContext(script, {
+        document: {
+          getElementById: (id: string) => elements.get(id) ?? null,
+          createElement: () => ({ textContent: "" }),
+        },
+        fetch: async (url: string) => {
+          steps.push(`fetch ${url}`);
+          const res = await app.inject(url);
+          return { json: () => Promise.resolve(res.json()) };
+        },
+        localStorage: { setItem: (key: string, value: string) => steps.push(`localStorage ${key}=${value}`) },
+        history: { pushState: (_state: unknown, _unused: string, url: string) => steps.push(`pushState ${url}`) },
+      });
+      const listener = listeners.get(event);
+      if (listener === undefined) throw new Error(`the page does not listen for ${event}`);
+      let prevented = false;
+      listener({ preventDefault: () => (prevented = true) });
+      await vi.waitFor(() => {
+        expect(steps.at(-1)).toMatch(/^pushState /);
+      });
+      return { steps, reads, prevented };
+    };
+
+    it("BEFORE と AFTER は name と tag から決まり、互いに違い、どちらも他方を含まない", () => {
+      const t = markedSearchTokens(NAME, TAG);
+      expect(t.before).not.toContain(t.after);
+      expect(t.after).not.toContain(t.before);
+      for (const other of [markedSearchTokens("secret", TAG), markedSearchTokens(NAME, "t2")]) {
+        expect(other.before).not.toBe(t.before);
+        expect(other.after).not.toBe(t.after);
+      }
+    });
+
+    it("頁は BEFORE を 1 か所だけに見せ、AFTER を持たず、空の欄とボタンを持つ", async () => {
+      const res = await fetchOk(app, scenarios.markedSearch(NAME, TAG));
+      const t = markedSearchTokens(NAME, TAG);
+      expect(res.headers["content-type"]).toContain("text/html");
+      // Once, and in the text: so in none of the page's URLs.
+      expect(res.body.split(t.before)).toHaveLength(2);
+      expect(res.body).toContain(`<p id="state">${t.before}</p>`);
+      expect(res.body).not.toContain(t.after);
+      expect(res.body).toContain('<input id="q" type="text">');
+      expect(res.body).toContain('<input id="token" type="text">');
+      expect(res.body).toContain('<button id="go" type="button">');
+      expect(res.body).toContain('<ul id="results"></ul>');
+      for (const url of [
+        scenarios.markedSearch(NAME, TAG),
+        scenarios.markedSearchResult(NAME, TAG),
+        scenarios.markedSearchAnswer(NAME, TAG, "q"),
+      ]) {
+        expect(url).not.toContain(t.before);
+        expect(url).not.toContain(t.after);
+      }
+    });
+
+    it("name は綴りの中の name だけを変える", async () => {
+      const a = await fetchOk(app, scenarios.markedSearch("alpha", TAG));
+      const b = await fetchOk(app, scenarios.markedSearch("bravo", TAG));
+      expect(a.body.replaceAll("alpha", "NAME")).toBe(b.body.replaceAll("bravo", "NAME"));
+    });
+
+    it("answer は q をそのまま返し、AFTER と、q を繰り返す 3 つの結果を返す", async () => {
+      const q = "個人 情報&x=1";
+      const res = await fetchOk(app, scenarios.markedSearchAnswer(NAME, TAG, q));
+      expect(res.headers["content-type"]).toContain("application/json");
+      expect(res.json()).toEqual({
+        q,
+        mark: markedSearchTokens(NAME, TAG).after,
+        items: [`${q} 1`, `${q} 2`, `${q} 3`],
+      });
+    });
+
+    it("/result を直に開くと、最初の頁と同じ HTML が返る", async () => {
+      const first = await fetchOk(app, scenarios.markedSearch(NAME, TAG));
+      const result = await fetchOk(app, scenarios.markedSearchResult(NAME, TAG));
+      expect(result.headers["content-type"]).toContain("text/html");
+      expect(result.body).toBe(first.body);
+    });
+
+    it("押すと答えを取って描き、BEFORE の所に AFTER を置き、q を localStorage に置き、最後に URL を /result に替える", async () => {
+      const page = await fetchOk(app, scenarios.markedSearch(NAME, TAG));
+      const q = "個人 情報";
+      const { steps } = await runSearch(page.body, { q, token: "" }, "click #go");
+      expect(steps).toEqual([
+        `fetch ${scenarios.markedSearchAnswer(NAME, TAG, q)}`,
+        `#results ${q} 1 | ${q} 2 | ${q} 3`,
+        `#state ${markedSearchTokens(NAME, TAG).after}`,
+        `localStorage marked-search:${NAME}=${q}`,
+        `pushState ${scenarios.markedSearchResult(NAME, TAG)}`,
+      ]);
+    });
+
+    it("#token の値は読まれず、要求にも URL にも storage にも頁にも入らない。q の値は入る", async () => {
+      const page = await fetchOk(app, scenarios.markedSearch(NAME, TAG));
+      // Neither field has a name, so not even a submitted form carries a value.
+      expect(page.body).not.toMatch(/<input[^>]* name=/);
+      const typed = { q: "typed-into-q-7f3a", token: "typed-into-token-7f3a" };
+      const { steps, reads } = await runSearch(page.body, typed, "click #go");
+      expect(reads).toEqual(["q"]);
+      // The query is the control: a value typed the same way, found where the
+      // token's is looked for. Without it, "not found" could mean "not looked".
+      expect(steps.join("\n")).toContain(typed.q);
+      expect(steps.join("\n")).not.toContain(typed.token);
+    });
+
+    it("form を submit しても送らず、押したのと同じ検索になる", async () => {
+      const page = await fetchOk(app, scenarios.markedSearch(NAME, TAG));
+      const typed = { q: "q1", token: "" };
+      const pressed = await runSearch(page.body, typed, "click #go");
+      const submitted = await runSearch(page.body, typed, "submit #form");
+      expect(submitted.prevented).toBe(true);
+      expect(submitted.steps).toEqual(pressed.steps);
+    });
+  });
 });
 
 describe("text a consumer has to keep as bytes", () => {
@@ -1052,6 +1213,10 @@ describe("malformed scenario parameters", () => {
     ["marked websocket without a tag", "/marked/websocket/public"],
     ["marked socket without from", "/marked/socket?tag=t1"],
     ["marked worker script without from", "/marked/asset/worker.js?tag=t1"],
+    ["marked search without a tag", "/marked/search/public"],
+    ["marked search result name with an uppercase letter", "/marked/search/Public/result?tag=t1"],
+    ["marked search answer without q", "/marked/search/public/answer?tag=t1"],
+    ["marked search answer without a tag", "/marked/search/public/answer?q=x"],
   ])("rejects %s", async (_name, url) => {
     expect((await app.inject(url)).statusCode).toBe(400);
   });

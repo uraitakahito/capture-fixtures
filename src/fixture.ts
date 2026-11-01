@@ -9,7 +9,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 
 import { CHARSET_ECHO, CHARSET_FIXTURES } from "./charset.js";
 import { BUILD_INFO } from "./generated/version.js";
-import { MARKED_WINDOW_WAYS, markedTokens, type MarkedWindowWay } from "./marked.js";
+import { MARKED_WINDOW_WAYS, markedSearchTokens, markedTokens, type MarkedWindowWay } from "./marked.js";
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
@@ -578,6 +578,65 @@ const markedWebSocketHtml = (name: string, tag: string): string =>
 
 /** The GUID RFC 6455 appends to the client's key to form `Sec-WebSocket-Accept`. */
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+/**
+ * A search that changes the page and never the document, the way a
+ * single-page application's does. As served it shows the before token and an
+ * empty form. Pressing `#go` fetches the answer, draws its results, puts the
+ * after token where the before token was, keeps the query in localStorage and,
+ * last of all, moves the URL with `pushState`: a script that waits for the URL
+ * to change finds the page already drawn.
+ *
+ * `#token` is read by nothing, and neither field has a `name`, so not even a
+ * submitted form could carry its value. The script finds elements by id and
+ * spells neither token, so each token is only where the page shows it. A bare
+ * `&` in the script — see `markedPageHtml`.
+ */
+const markedSearchHtml = (name: string, tag: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>search</title></head><body>
+<h1>search</h1>
+<p id="state">${markedSearchTokens(name, tag).before}</p>
+<form id="form">
+<label>query <input id="q" type="text"></label>
+<label>token <input id="token" type="text"></label>
+<button id="go" type="button">search</button>
+</form>
+<ul id="results"></ul>
+<script>
+const search = async () => {
+  const q = document.getElementById("q").value;
+  const answer = await (await fetch("/marked/search/${name}/answer?tag=${tag}&q=" + encodeURIComponent(q))).json();
+  document.getElementById("results").replaceChildren(...answer.items.map((item) => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    return li;
+  }));
+  document.getElementById("state").textContent = answer.mark;
+  localStorage.setItem("marked-search:${name}", q);
+  history.pushState({}, "", "/marked/search/${name}/result?tag=${tag}");
+};
+document.getElementById("go").addEventListener("click", search);
+document.getElementById("form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  search();
+});
+</script>
+</body></html>`;
+
+/** What the search page draws for query `q`. */
+interface MarkedSearchAnswer {
+  readonly q: string;
+  /** The after token. */
+  readonly mark: string;
+  /** Three results that repeat the query, so what is drawn depends on what was typed. */
+  readonly items: readonly string[];
+}
+
+const markedSearchAnswer = (name: string, tag: string, q: string): MarkedSearchAnswer => ({
+  q,
+  mark: markedSearchTokens(name, tag).after,
+  items: [1, 2, 3].map((n) => `${q} ${String(n)}`),
+});
 
 /** Where a marked page's link goes. No token: it is not the page under test. */
 const MARKED_LEAF_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>leaf</title></head><body>
@@ -1335,6 +1394,41 @@ export function buildFixture(): FastifyInstance {
     "/marked/socket",
     { schema: { querystring: slugs(["from", "tag"]) } },
     (_request, reply) => reply.code(426).header("upgrade", "websocket").send("this endpoint speaks WebSocket"),
+  );
+
+  // A search that changes the page, not the document. The result URL is where
+  // the page's pushState goes; opened directly it serves the page as first
+  // served, as a single-page application's server does for any of its URLs.
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/search/:name",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) => reply.type("text/html").send(markedSearchHtml(request.params.name, request.query.tag)),
+  );
+
+  app.get<{ Params: { name: string }; Querystring: { tag: string } }>(
+    "/marked/search/:name/result",
+    { schema: { params: slugs(["name"]), querystring: slugs(["tag"]) } },
+    (request, reply) => reply.type("text/html").send(markedSearchHtml(request.params.name, request.query.tag)),
+  );
+
+  // The query is whatever was typed, so it has no pattern: the page draws it
+  // with textContent, and JSON carries it escaped.
+  app.get<{ Params: { name: string }; Querystring: { tag: string; q: string } }>(
+    "/marked/search/:name/answer",
+    {
+      schema: {
+        params: slugs(["name"]),
+        querystring: {
+          type: "object",
+          properties: { tag: SLUG, q: { type: "string" } },
+          required: ["tag", "q"],
+        },
+      },
+    },
+    (request, reply) => {
+      const { tag, q } = request.query;
+      return reply.send(markedSearchAnswer(request.params.name, tag, q));
+    },
   );
 
   app.get(

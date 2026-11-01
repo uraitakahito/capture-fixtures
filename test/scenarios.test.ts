@@ -38,6 +38,11 @@ describe("scenarios URL contract", () => {
     expect(scenarios.markedKinds("public", "d9")).toBe("/marked/kinds/public?tag=d9");
     expect(scenarios.markedWebSocket("public", "d12")).toBe("/marked/websocket/public?tag=d12");
     expect(scenarios.markedSocket("public", "d12")).toBe("/marked/socket?from=public&tag=d12");
+    expect(scenarios.markedSearch("public", "sn1")).toBe("/marked/search/public?tag=sn1");
+    expect(scenarios.markedSearchResult("public", "sn1")).toBe("/marked/search/public/result?tag=sn1");
+    expect(scenarios.markedSearchAnswer("public", "sn1", "個人 情報&x")).toBe(
+      "/marked/search/public/answer?tag=sn1&q=%E5%80%8B%E4%BA%BA%20%E6%83%85%E5%A0%B1%26x",
+    );
   });
 
   it("url-encodes counter keys so parallel tests stay isolated", () => {
@@ -105,6 +110,9 @@ describe("every scenario reaches the fixture", () => {
     ["markedKinds", scenarios.markedKinds("public", "contract")],
     ["markedWebSocket", scenarios.markedWebSocket("public", "contract")],
     ["markedSocket", scenarios.markedSocket("public", "contract")],
+    ["markedSearch", scenarios.markedSearch("public", "contract")],
+    ["markedSearchResult", scenarios.markedSearchResult("public", "contract")],
+    ["markedSearchAnswer", scenarios.markedSearchAnswer("public", "contract", "q")],
     ["markedAsset", scenarios.markedAsset("pixel.svg", "secret", "contract")],
     ["asset", scenarios.asset("hero.svg")],
   ];
