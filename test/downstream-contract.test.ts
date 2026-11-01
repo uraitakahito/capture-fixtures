@@ -49,7 +49,7 @@ import { scenarios } from "../src/scenarios.js";
  * shortest it sends.
  *
  * So is the embedOrigin row (2026-09-26). BrowserHive's e2e runs a second
- * instance in each of its sets — `capture-fixtures-b`, `-2-b`, `-3-b` — and
+ * instance in each of its sets — `capture-fixtures-1-b`, `-2-b`, `-3-b` — and
  * embeds from it. The row spells the longest of the three, so an origin bound
  * that would refuse one of them goes red here.
  *
