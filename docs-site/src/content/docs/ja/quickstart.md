@@ -68,6 +68,13 @@ BrowserHive の e2e のスタックは、組ごとに 2 台を別の名前で建
 
 変更が必要な場合は、環境変数を渡す通常のやり方で渡します。
 
+### 止め方
+
+コンテナは SIGTERM と SIGINT を受け付けます。受け付けを閉じ、処理中の要求を終えてから
+終了コード 0 で終わるので、`docker stop` や compose の停止は 1 秒以内に返ります。
+閉じ切れないときは数秒で諦めて終了コード 1 で終わります。これが無いと、PID 1 の node は
+信号を無視し、猶予が尽きてから殺されます。
+
 ```sh
 # container / docker
 container run -d --name capture-fixtures -e CAPTURE_FIXTURES_PORT=9090 capture-fixtures

@@ -56,6 +56,10 @@ jobs:
           echo "fails-then-succeeds codes: $codes"
           test "$codes" = "503 503 200 "
 
+      - name: Stop within the grace period
+        # PID 1 の node が SIGTERM を受けて閉じるか。handler が無いと docker は 10 秒待って SIGKILL するので、
+        # 5 秒で切って落とす。手元の試験（test/serve.test.ts）は PID 1 を再現できないので、ここだけが PID 1 としての確かめ。
+        run: timeout 5 docker stop smoke
       - name: Capture logs on failure
         if: failure()
         run: docker logs smoke || true
