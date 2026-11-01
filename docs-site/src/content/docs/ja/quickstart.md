@@ -49,7 +49,7 @@ curl -sf http://<capture-fixtures-ip>:8080/health
 
 Apple Container でプロジェクト DNS ドメインを使っている場合は名前で届きます。
 BrowserHive の e2e のスタックは、組ごとに 2 台を別の名前で建て、ブラウザから見て別サイトにしています。
-組 1 では `capture-fixtures-a.browserhive:8080` と `capture-fixtures-b.browserhive:8080` です。
+組 1 では `capture-fixtures-1-a.browserhive:8080` と `capture-fixtures-1-b.browserhive:8080` です（名前に組の番号が入ります）。
 
 ### 設定
 
