@@ -12,9 +12,14 @@
  *
  * ## What it reads
  *
- * Text files tracked by git under SCOPES (the tests, and what the tests read). Four shapes:
- * example.com and friends, their SURT (com,example), *.example, and its SURT (example,a).
- * A regular expression's \. counts as the same name.
+ * Text files under SCOPES (the tests, and what the tests read) that git tracks, and new ones
+ * not added yet, so a new test file is read before its first commit rather than first in CI.
+ * Files git ignores are not read. The list is read with -z because git's default
+ * (core.quotepath=true, on the CI runners too) prints non-ASCII names in quotes, and those
+ * would be skipped without a word as files that are not on disk.
+ *
+ * Four shapes: example.com and friends, their SURT (com,example), *.example, and its SURT
+ * (example,a). A regular expression's \. counts as the same name.
  *
  * ## What it does not read
  *
@@ -22,7 +27,7 @@
  * where they belong. .env.example (a file name, not a host) and non-text files such as zips.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 /** Where this repo keeps its tests. The only line that differs between repos. */
 const SCOPES = ["test"];
@@ -38,9 +43,15 @@ const FIND = [
   /(?<![A-Za-z0-9-])example,[A-Za-z0-9-]+[),]/i,
 ];
 
-const files = execFileSync("git", ["ls-files", "--", ...SCOPES], { encoding: "utf8" })
-  .split("\n")
-  .filter(Boolean);
+const files = execFileSync(
+  "git",
+  ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...SCOPES],
+  { encoding: "utf8" },
+)
+  .split("\0")
+  .filter(Boolean)
+  // The index still lists a file deleted from disk until the deletion is staged.
+  .filter((file) => statSync(file, { throwIfNoEntry: false })?.isFile() === true);
 let found = 0;
 for (const file of files) {
   const text = readFileSync(file, "utf8");
