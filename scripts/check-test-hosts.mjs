@@ -14,7 +14,9 @@
  *
  * Text files under SCOPES (the tests, and what the tests read) that git tracks, and new ones
  * not added yet, so a new test file is read before its first commit rather than first in CI.
- * Files git ignores are not read.
+ * Files git ignores are not read. The list is read with -z because git's default
+ * (core.quotepath=true, on the CI runners too) prints non-ASCII names in quotes, and those
+ * would be skipped without a word as files that are not on disk.
  *
  * Four shapes: example.com and friends, their SURT (com,example), *.example, and its SURT
  * (example,a). A regular expression's \. counts as the same name.
@@ -43,10 +45,10 @@ const FIND = [
 
 const files = execFileSync(
   "git",
-  ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...SCOPES],
+  ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...SCOPES],
   { encoding: "utf8" },
 )
-  .split("\n")
+  .split("\0")
   .filter(Boolean)
   // The index still lists a file deleted from disk until the deletion is staged.
   .filter((file) => statSync(file, { throwIfNoEntry: false })?.isFile() === true);
