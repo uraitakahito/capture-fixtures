@@ -9,7 +9,15 @@ import Fastify, { type FastifyInstance } from "fastify";
 
 import { CHARSET_ECHO, CHARSET_FIXTURES } from "./charset.js";
 import { BUILD_INFO } from "./generated/version.js";
-import { MARKED_WINDOW_WAYS, markedSearchTokens, markedTokens, type MarkedWindowWay } from "./marked.js";
+import {
+  MARKED_CONSOLE_METHODS,
+  MARKED_CONSOLE_MODES,
+  MARKED_WINDOW_WAYS,
+  markedSearchTokens,
+  markedTokens,
+  type MarkedConsoleMode,
+  type MarkedWindowWay,
+} from "./marked.js";
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
@@ -637,6 +645,68 @@ const markedSearchAnswer = (name: string, tag: string, q: string): MarkedSearchA
   mark: markedSearchTokens(name, tag).after,
   items: [1, 2, 3].map((n) => `${q} ${String(n)}`),
 });
+
+/** Where the parts of `/marked/console/<mode>/<name>` are, each carrying `tag`. */
+const markedConsolePart = (mode: MarkedConsoleMode, name: string, tag: string, part: "frame" | "worker.js"): string =>
+  `/marked/console/${mode}/${name}/${part}?tag=${tag}`;
+
+/** One `console.<method>(mark("<when>-<method>"))` per method, each on its own line. */
+const consoleCalls = (when: "loading" | "loaded", indent: string): string =>
+  MARKED_CONSOLE_METHODS.map((method) => `${indent}console.${method}(mark("${when}-${method}"));`).join("\n");
+
+/**
+ * A page that reaches its console every way of `MARKED_CONSOLE_WAYS` (`writes`),
+ * or the same page with every write taken out (`silent`): the same iframe from
+ * the same origin and the same worker, with nothing written in them either.
+ *
+ * Each token is joined as the script runs, from the way, `name` and `tag` written
+ * apart, so no URL and no body here spells one. The page's HTML, its frame's HTML
+ * and its worker's script reach an archive whether or not the console was kept;
+ * a token found anywhere a consumer stored came through the console.
+ *
+ * The throw is the script's last statement, so everything before it has run.
+ * The icon is `data:,` because without one a browser asks for `/favicon.ico`,
+ * which this fixture answers 404, and Chrome writes that 404 into the page's
+ * console as an error — a line `silent` must not have.
+ *
+ * `embedOrigin` puts the iframe on another origin, as on `markedPageHtml`.
+ */
+const markedConsoleHtml = (
+  mode: MarkedConsoleMode,
+  name: string,
+  tag: string,
+  embedOrigin: string | undefined,
+): string => {
+  const writes = (lines: string): string => (mode === "writes" ? lines : "");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>console ${mode}</title><link rel="icon" href="data:,"></head><body>
+<h1>console ${mode}</h1>
+<iframe src="${embedOrigin ?? ""}${markedConsolePart(mode, name, tag, "frame")}" width="320" height="240"></iframe>
+<script>${writes(`
+const mark = (way) => [way, "${name}", "${tag}"].join("-");
+${consoleCalls("loading", "")}
+addEventListener("load", () => setTimeout(() => {
+${consoleCalls("loaded", "  ")}
+}, 0));`)}
+new Worker("${markedConsolePart(mode, name, tag, "worker.js")}");${writes(`
+Promise.reject(new Error(mark("reject")));
+throw new Error(mark("throw"));`)}
+</script>
+</body></html>`;
+};
+
+/** The iframe of `markedConsoleHtml`. `writes` writes the `frame` token, joined as it runs. */
+const markedConsoleFrameHtml = (mode: MarkedConsoleMode, name: string, tag: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>console ${mode} frame</title></head><body>
+<p>console ${mode} frame</p>${
+    mode === "writes" ? `\n<script>console.log(["frame", "${name}", "${tag}"].join("-"));</script>` : ""
+  }
+</body></html>`;
+
+/** The dedicated worker's script of `markedConsoleHtml`. `writes` writes the `worker` token, joined as it runs. */
+const markedConsoleWorkerJs = (mode: MarkedConsoleMode, name: string, tag: string): string =>
+  mode === "writes"
+    ? `console.log(["worker", "${name}", "${tag}"].join("-"));\n`
+    : "// The silent twin's worker: it runs, and writes nothing.\n";
 
 /** Where a marked page's link goes. No token: it is not the page under test. */
 const MARKED_LEAF_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>leaf</title></head><body>
@@ -1428,6 +1498,51 @@ export function buildFixture(): FastifyInstance {
     (request, reply) => {
       const { tag, q } = request.query;
       return reply.send(markedSearchAnswer(request.params.name, tag, q));
+    },
+  );
+
+  // A page's own console: `writes` reaches it every way of MARKED_CONSOLE_WAYS,
+  // `silent` is the same page with every write taken out (markedConsoleHtml).
+  // The frame and the worker are each mode's own, so the twin stays silent in them too.
+  const consoleParams = {
+    type: "object",
+    properties: { mode: { type: "string", enum: [...MARKED_CONSOLE_MODES] }, name: SLUG },
+    required: ["mode", "name"],
+  };
+  app.get<{ Params: { mode: MarkedConsoleMode; name: string }; Querystring: { tag: string; embedOrigin?: string } }>(
+    "/marked/console/:mode/:name",
+    {
+      schema: {
+        params: consoleParams,
+        querystring: {
+          type: "object",
+          properties: { tag: SLUG, embedOrigin: ORIGIN },
+          required: ["tag"],
+        },
+      },
+    },
+    (request, reply) => {
+      const { mode, name } = request.params;
+      const { tag, embedOrigin } = request.query;
+      return reply.type("text/html").send(markedConsoleHtml(mode, name, tag, embedOrigin));
+    },
+  );
+
+  app.get<{ Params: { mode: MarkedConsoleMode; name: string }; Querystring: { tag: string } }>(
+    "/marked/console/:mode/:name/frame",
+    { schema: { params: consoleParams, querystring: slugs(["tag"]) } },
+    (request, reply) => {
+      const { mode, name } = request.params;
+      return reply.type("text/html").send(markedConsoleFrameHtml(mode, name, request.query.tag));
+    },
+  );
+
+  app.get<{ Params: { mode: MarkedConsoleMode; name: string }; Querystring: { tag: string } }>(
+    "/marked/console/:mode/:name/worker.js",
+    { schema: { params: consoleParams, querystring: slugs(["tag"]) } },
+    (request, reply) => {
+      const { mode, name } = request.params;
+      return reply.type("text/javascript").send(markedConsoleWorkerJs(mode, name, request.query.tag));
     },
   );
 

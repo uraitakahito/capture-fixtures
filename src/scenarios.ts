@@ -9,7 +9,7 @@
  * Static scenarios are plain strings; parameterised ones are builder functions.
  * Prefix each with the fixture origin, e.g. `` `http://${ip}:8080` + scenarios.ok ``.
  */
-import type { MarkedWindowWay } from "./marked.js";
+import type { MarkedConsoleMode, MarkedWindowWay } from "./marked.js";
 
 /** How {@link scenarios.markedOpener} asks: which way, how often, how many times, and from where. */
 export interface MarkedOpenerOptions {
@@ -405,6 +405,32 @@ export const scenarios = {
    */
   markedSearchAnswer: (name: string, tag: string, q: string): string =>
     `/marked/search/${name}/answer?tag=${tag}&q=${encodeURIComponent(q)}`,
+  /**
+   * A page that writes to its own console. With `mode` `writes` it reaches the
+   * console every way of `MARKED_CONSOLE_WAYS`, each way with its own token from
+   * `markedConsoleTokens(name, tag)`. `silent` is the same page with every write
+   * taken out.
+   *
+   * The tokens are joined by the page's script as it runs: no URL and no response
+   * body spells one, so a token found in anything a consumer stored came through
+   * the console. A line a consumer files under the `silent` page came from
+   * somewhere other than the page.
+   *
+   * `embedOrigin` serves the iframe, {@link scenarios.markedConsoleFrame}, from
+   * another instance of this fixture — another site, in a process of its own.
+   */
+  markedConsole: (mode: MarkedConsoleMode, name: string, tag: string, opts: { embedOrigin?: string } = {}): string =>
+    `/marked/console/${mode}/${name}?tag=${tag}` +
+    (opts.embedOrigin === undefined ? "" : `&embedOrigin=${encodeURIComponent(opts.embedOrigin)}`),
+  /** The iframe {@link scenarios.markedConsole} holds. `writes` writes the `frame` token with `console.log`. */
+  markedConsoleFrame: (mode: MarkedConsoleMode, name: string, tag: string): string =>
+    `/marked/console/${mode}/${name}/frame?tag=${tag}`,
+  /**
+   * The script of the dedicated worker {@link scenarios.markedConsole} starts.
+   * `writes` writes the `worker` token with `console.log`.
+   */
+  markedConsoleWorker: (mode: MarkedConsoleMode, name: string, tag: string): string =>
+    `/marked/console/${mode}/${name}/worker.js?tag=${tag}`,
   /**
    * What marked page `from` loads: the image it paints, the JSON its script
    * fetches, and the script a {@link scenarios.markedWorker} page runs in its

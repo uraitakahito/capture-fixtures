@@ -43,6 +43,14 @@ describe("scenarios URL contract", () => {
     expect(scenarios.markedSearchAnswer("public", "sn1", "個人 情報&x")).toBe(
       "/marked/search/public/answer?tag=sn1&q=%E5%80%8B%E4%BA%BA%20%E6%83%85%E5%A0%B1%26x",
     );
+    expect(scenarios.markedConsole("writes", "public", "c1")).toBe("/marked/console/writes/public?tag=c1");
+    expect(scenarios.markedConsole("silent", "public", "c2", { embedOrigin: "http://b.test:8080" })).toBe(
+      "/marked/console/silent/public?tag=c2&embedOrigin=http%3A%2F%2Fb.test%3A8080",
+    );
+    expect(scenarios.markedConsoleFrame("writes", "public", "c1")).toBe("/marked/console/writes/public/frame?tag=c1");
+    expect(scenarios.markedConsoleWorker("silent", "public", "c2")).toBe(
+      "/marked/console/silent/public/worker.js?tag=c2",
+    );
   });
 
   it("url-encodes counter keys so parallel tests stay isolated", () => {
@@ -113,6 +121,9 @@ describe("every scenario reaches the fixture", () => {
     ["markedSearch", scenarios.markedSearch("public", "contract")],
     ["markedSearchResult", scenarios.markedSearchResult("public", "contract")],
     ["markedSearchAnswer", scenarios.markedSearchAnswer("public", "contract", "q")],
+    ["markedConsole", scenarios.markedConsole("writes", "public", "contract")],
+    ["markedConsoleFrame", scenarios.markedConsoleFrame("silent", "public", "contract")],
+    ["markedConsoleWorker", scenarios.markedConsoleWorker("writes", "public", "contract")],
     ["markedAsset", scenarios.markedAsset("pixel.svg", "secret", "contract")],
     ["asset", scenarios.asset("hero.svg")],
   ];

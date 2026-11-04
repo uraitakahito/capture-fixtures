@@ -79,3 +79,60 @@ export const markedSearchTokens = (name: string, tag: string): MarkedSearchToken
   before: `before-${name}-${tag}`,
   after: `after-${name}-${tag}`,
 });
+
+/**
+ * The two pages of `/marked/console`. `writes` reaches its console every way of
+ * {@link MARKED_CONSOLE_WAYS}; `silent` is the same page with every write taken
+ * out. A consumer that keeps a page's console keeps a line for each way from the
+ * first and nothing from the second.
+ */
+export const MARKED_CONSOLE_MODES = ["writes", "silent"] as const;
+
+/** One of {@link MARKED_CONSOLE_MODES}. */
+export type MarkedConsoleMode = (typeof MARKED_CONSOLE_MODES)[number];
+
+// #region console-ways
+/** The console methods `/marked/console/writes` calls while its document loads, and again once it has. */
+export const MARKED_CONSOLE_METHODS = ["log", "info", "warn", "error"] as const;
+
+/**
+ * The ways `/marked/console/writes` reaches the console, each with a token of its
+ * own, so a consumer's line says which way it came:
+ *
+ * - `loading-<method>`: `console.<method>` while the document loads
+ * - `loaded-<method>`: the same, from a timer after the load event
+ * - `throw`: an uncaught exception, an `Error` whose message is the token
+ * - `reject`: an unhandled rejection, the same
+ * - `frame`: `console.log` in the page's iframe
+ * - `worker`: `console.log` in the page's dedicated worker
+ */
+export const MARKED_CONSOLE_WAYS = [
+  ...MARKED_CONSOLE_METHODS.map((method) => `loading-${method}` as const),
+  ...MARKED_CONSOLE_METHODS.map((method) => `loaded-${method}` as const),
+  "throw",
+  "reject",
+  "frame",
+  "worker",
+] as const;
+// #endregion
+
+/** One of {@link MARKED_CONSOLE_METHODS}. */
+export type MarkedConsoleMethod = (typeof MARKED_CONSOLE_METHODS)[number];
+
+/** One of {@link MARKED_CONSOLE_WAYS}. */
+export type MarkedConsoleWay = (typeof MARKED_CONSOLE_WAYS)[number];
+
+/** The tokens `/marked/console/writes` page `name` writes under `tag`, one per way. */
+export type MarkedConsoleTokens = Readonly<Record<MarkedConsoleWay, string>>;
+
+/**
+ * `<way>-<name>-<tag>`, spelled here for the reason {@link markedTokens} is. The
+ * page joins each token as it runs, from the way, `name` and `tag` written apart,
+ * so none of its URLs and none of its response bodies spells one: a token leaves
+ * the page only through its console.
+ */
+export const markedConsoleTokens = (name: string, tag: string): MarkedConsoleTokens =>
+  Object.fromEntries(MARKED_CONSOLE_WAYS.map((way) => [way, `${way}-${name}-${tag}`])) as Record<
+    MarkedConsoleWay,
+    string
+  >;

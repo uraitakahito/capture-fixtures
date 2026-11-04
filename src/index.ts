@@ -7,10 +7,18 @@ export type { RecordedRequest, RequestLog } from "./fixture.js";
 export { scenarios, type Scenarios } from "./scenarios.js";
 export { CHARSET_ECHO, CHARSET_FIXTURES, type CharsetBody, type CharsetPath } from "./charset.js";
 export {
+  MARKED_CONSOLE_METHODS,
+  MARKED_CONSOLE_MODES,
+  MARKED_CONSOLE_WAYS,
   MARKED_KINDS,
   MARKED_WINDOW_WAYS,
+  markedConsoleTokens,
   markedSearchTokens,
   markedTokens,
+  type MarkedConsoleMethod,
+  type MarkedConsoleMode,
+  type MarkedConsoleTokens,
+  type MarkedConsoleWay,
   type MarkedKind,
   type MarkedSearchTokens,
   type MarkedTokens,

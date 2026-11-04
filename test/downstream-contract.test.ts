@@ -28,6 +28,9 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive/test/e2e/stop-under-load.e2e.test.ts  fetchStorm(5_000_000, 40, 3)   ← see below
  *   browserhive/test/e2e/warc-rollover.e2e.test.ts  warcRollover(8, 250_000)   ← see below
  *   browserhive/test/e2e/snapshots.e2e.test.ts   markedSearch, markedSearchResult, markedSearchAnswer   ← see below
+ *   browserhive's e2e for a page's own console (CAPTURE-18, not written yet)
+ *                                                markedConsole("writes" | "silent", …, { embedOrigin }),
+ *                                                markedConsoleFrame, markedConsoleWorker   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -76,6 +79,15 @@ import { scenarios } from "../src/scenarios.js";
  * the tags are short like theirs, and the query is text with a space and
  * characters outside ASCII: what a script types is anything, and a pattern
  * added to `q` would refuse it here first.
+ *
+ * So are the console rows (2026-11-04): `/marked/console` was written for
+ * BrowserHive's test that it keeps what the page it captures writes to its own
+ * console, every way of `MARKED_CONSOLE_WAYS`, which lands with its next release
+ * (CAPTURE-18). It captures both twins with the iframe on its set's b site, so
+ * the rows spell the longest b origin, as the embedOrigin row does. The secret
+ * row is for the rule that a page withheld by policy leaves no lines of its
+ * console, which can carry the page's text. The frame and worker rows are what
+ * the e2e looks for in a request log.
  *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
@@ -136,6 +148,17 @@ describe("values BrowserHive passes today", () => {
     ["markedSearchResult public", scenarios.markedSearchResult("public", "sn1")],
     ["markedSearchAnswer with what a script types", scenarios.markedSearchAnswer("public", "sn1", "個人 情報")],
     ["markedSearch secret", scenarios.markedSearch("secret", "sn4")],
+    [
+      "markedConsole writes, its iframe from another site",
+      scenarios.markedConsole("writes", "public", "c1", { embedOrigin: "http://capture-fixtures-3-b.browserhive:8080" }),
+    ],
+    [
+      "markedConsole silent, its iframe from another site",
+      scenarios.markedConsole("silent", "public", "c2", { embedOrigin: "http://capture-fixtures-3-b.browserhive:8080" }),
+    ],
+    ["markedConsole writes, the page a policy withholds", scenarios.markedConsole("writes", "secret", "c3")],
+    ["markedConsoleFrame writes", scenarios.markedConsoleFrame("writes", "public", "c1")],
+    ["markedConsoleWorker writes", scenarios.markedConsoleWorker("writes", "public", "c1")],
   ])("%s is not refused", async (name, path) => {
     // 404, 503 and 302 are all legitimate answers; 400 means a bound is too
     // tight and the submodule bump would break the downstream suite.
