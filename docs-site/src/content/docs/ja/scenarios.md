@@ -600,6 +600,33 @@ form には、検索の欄 `#q`、もう 1 つの文字の欄 `#token`、何も�
 `/marked/search/:name/result?tag=` を直に開くと、最初に配ったページと同じ物が返る。single-page application のサーバが、どの URL にも同じ物を返すのと同じ。
 見えるのは検索前の印で、検索の答えではない。
 
+### `/marked/console/:mode/:name?tag=` ― ページが自分の console に書くもの
+
+ページが console に書いたものを残す消費者のためのもの。
+印はこのページだけのもので、`<way>-<name>-<tag>`。ページが console に届く経路ごとに 1 つあり、消費者が残した行が、どの経路から来たかを言う。
+綴りは書き写さず、`markedConsoleTokens(name, tag)` から取る。経路は `MARKED_CONSOLE_WAYS` にある。
+
+```ts file="src/marked.ts#console-ways"
+```
+
+`mode` が `writes` のページは、その経路を全部通る。
+iframe は `/marked/console/writes/:name/frame?tag=`、dedicated worker のスクリプトは `/marked/console/writes/:name/worker.js?tag=`。
+
+`&embedOrigin=<origin>` を付けると、`/marked/page` と同じく、iframe を別の capture-fixtures から配る。
+ブラウザにとっては別サイトになり、iframe は別の process で動く。
+受け付けるのは素の origin だけ。
+
+印は、ページのスクリプトが走るときに、別々に書いた経路・`name`・`tag` からつなぐ。だから、ページのどの URL にも、どの応答の本文にも、印は綴られない。
+ページの HTML、iframe の HTML、worker のスクリプトは、console を残したかどうかに関わらず archive に入る。消費者が置いた物のどこかに印が見つかったら、それは console を通って来たもの。
+
+`mode` が `silent` のページは、同じページから書くものを全部抜いたもの。
+同じ origin からの同じ iframe と同じ worker を持ち、何も書かず、投げず、reject しない。
+消費者がこのページの行として残したものは、ページ以外のどこかから来ている。
+
+どちらのページも icon を `data:,` にしている。
+icon が無いと、ブラウザは `/favicon.ico` を取りに行き、この fixture は 404 を返し、Chrome はその 404 を error としてページの console に書く。silent のページにあってはならない行になる。
+ここのほかのページは icon を持たないので、console を残す消費者は、それらの行の中にこの 404 を見つけることがある。
+
 ### `/marked/asset/*`・`/marked/leaf` ― ページが読むものとリンク先
 
 `pixel.svg`、`data.json`（beacon の POST には 204 を返す）、worker の `worker.js`、リンクの行き先。

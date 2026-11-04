@@ -646,6 +646,41 @@ Opened directly, `/marked/search/:name/result?tag=` serves the page as first
 served, as a single-page application's server does for any of its URLs. It shows
 the before token, not a search's answer.
 
+### `/marked/console/:mode/:name?tag=` — what a page writes to its own console
+
+For consumers that keep what a page writes to its console. Its tokens are its
+own, `<way>-<name>-<tag>`: one for each way the page reaches the console, so a
+line a consumer kept says which way it came. Take the spelling from
+`markedConsoleTokens(name, tag)`. The ways are `MARKED_CONSOLE_WAYS`:
+
+```ts file="src/marked.ts#console-ways"
+```
+
+With `mode` `writes`, the page goes every one of those ways. Its iframe is
+`/marked/console/writes/:name/frame?tag=` and its dedicated worker's script
+`/marked/console/writes/:name/worker.js?tag=`.
+
+`&embedOrigin=<origin>` serves the iframe from another instance of
+capture-fixtures, as on `/marked/page`: another site, which a browser runs in a
+process of its own. Only a bare origin is accepted.
+
+The page joins each token as it runs, from the way, `name` and `tag` written
+apart, so none of its URLs and none of its response bodies spells one. The
+page's HTML, its iframe's HTML and its worker's script reach an archive whether
+or not the console was kept; a token found anywhere a consumer stored came
+through the console.
+
+With `mode` `silent`, it is the same page with every write taken out: the same
+iframe from the same origin and the same worker, writing nothing, throwing
+nothing and rejecting nothing. A line a consumer files under this page came from
+somewhere other than the page.
+
+Both pages give `data:,` as their icon. Without one, a browser asks for
+`/favicon.ico`, this fixture answers 404, and Chrome writes that 404 into the
+page's console as an error — a line the silent page must not have. The other
+pages here have no icon, so a consumer that keeps the console can find that 404
+among their lines.
+
 ### `/marked/asset/*`, `/marked/leaf` — what the page loads and links to
 
 `pixel.svg`, `data.json` (a beacon's POST to it is answered with 204), the

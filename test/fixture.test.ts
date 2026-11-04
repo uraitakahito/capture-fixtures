@@ -8,10 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHARSET_ECHO, CHARSET_FIXTURES } from "../src/charset.js";
 import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
 import {
+  MARKED_CONSOLE_MODES,
+  MARKED_CONSOLE_WAYS,
   MARKED_KINDS,
   MARKED_WINDOW_WAYS,
+  markedConsoleTokens,
   markedSearchTokens,
   markedTokens,
+  type MarkedConsoleMode,
   type MarkedWindowWay,
 } from "../src/marked.js";
 import { scenarios } from "../src/scenarios.js";
@@ -1063,6 +1067,211 @@ describe("pages a consumer must not keep", () => {
       expect(submitted.steps).toEqual(pressed.steps);
     });
   });
+
+  describe("/marked/console/:mode/:name — 頁が自分の console に書くものと、書かない双子", () => {
+    const NAME = "public";
+    const TAG = "t1";
+    const OTHER_SITE = "http://capture-fixtures-b.test:8080";
+
+    /** What a script did to the stand-ins for the parts of a browser it touches. */
+    interface Ran {
+      /** Every console call, in order, as `<method> <arguments>`. */
+      readonly console: string[];
+      /** The message of what the script threw and nothing caught. */
+      thrown: string | undefined;
+      /** The messages of the rejections it left without a handler. */
+      readonly rejected: string[];
+      /** The scripts it started a dedicated worker from. */
+      readonly workers: string[];
+      readonly listeners: Map<string, () => void>;
+      readonly timers: { readonly ms: number; readonly callback: () => void }[];
+    }
+
+    /**
+     * Runs `script` against stand-ins for what the console page touches. The
+     * console records a call to any method, so one the page should not make is
+     * caught too. `Promise.reject` records the reason and returns nothing: the
+     * page attaches no handler, and a handler it attached would fail on undefined.
+     */
+    const run = (script: string): Ran => {
+      const ran: Ran = { console: [], thrown: undefined, rejected: [], workers: [], listeners: new Map(), timers: [] };
+      const recorder = new Proxy(
+        {},
+        {
+          get:
+            (_target, method) =>
+            (...args: unknown[]) =>
+              ran.console.push([String(method), ...args.map(String)].join(" ")),
+        },
+      );
+      try {
+        runInNewContext(script, {
+          console: recorder,
+          addEventListener: (type: string, listener: () => void) => ran.listeners.set(type, listener),
+          setTimeout: (callback: () => void, ms: number) => ran.timers.push({ ms, callback }),
+          Worker: function Worker(url: string) {
+            ran.workers.push(url);
+          },
+          Promise: {
+            reject: (reason: { message: string }) => {
+              ran.rejected.push(reason.message);
+            },
+          },
+        });
+      } catch (error) {
+        ran.thrown = (error as { message: string }).message;
+      }
+      return ran;
+    };
+
+    /** The document's one script, or nothing to run when it has none. */
+    const scriptOf = (html: string): string => /<script>([\s\S]*)<\/script>/.exec(html)?.[1] ?? "";
+
+    /** Where the page's iframe is. */
+    const frameOf = (html: string): string => {
+      const src = /<iframe src="([^"]+)"/.exec(html)?.[1];
+      if (src === undefined) throw new Error("the page holds no iframe");
+      return src;
+    };
+
+    /**
+     * Everything `mode`'s page writes once all it sets going has run: the load
+     * event fired, its timers run, its iframe's and its worker's scripts run. Each
+     * entry is `<method> <text>`, or `throw <message>` and `reject <message>`.
+     */
+    const writtenBy = async (mode: MarkedConsoleMode): Promise<string[]> => {
+      const page = await fetchOk(app, scenarios.markedConsole(mode, NAME, TAG));
+      const main = run(scriptOf(page.body));
+      for (const listener of main.listeners.values()) listener();
+      for (const timer of main.timers) timer.callback();
+      const frame = run(scriptOf((await fetchOk(app, frameOf(page.body))).body));
+      const workers = await Promise.all(main.workers.map(async (url) => run((await fetchOk(app, url)).body)));
+      return [main, frame, ...workers].flatMap((ran) => [
+        ...ran.console,
+        ...(ran.thrown === undefined ? [] : [`throw ${ran.thrown}`]),
+        ...ran.rejected.map((message) => `reject ${message}`),
+      ]);
+    };
+
+    it("印は経路・name・tag から決まり、どれも違い、どれも他の印を含まない", () => {
+      const t = markedConsoleTokens(NAME, TAG);
+      const all = MARKED_CONSOLE_WAYS.map((way) => t[way]);
+      expect(new Set(all).size).toBe(MARKED_CONSOLE_WAYS.length);
+      // A consumer finds a token by looking for it in a line, so one token inside
+      // another would be found where the other was written.
+      for (const a of all) for (const b of all) if (a !== b) expect(a).not.toContain(b);
+      for (const other of [markedConsoleTokens("secret", TAG), markedConsoleTokens(NAME, "t2")]) {
+        for (const way of MARKED_CONSOLE_WAYS) expect(other[way]).not.toBe(t[way]);
+      }
+    });
+
+    it("writes は読み込みの途中に log・info・warn・error で書いて投げ、reject し、load の後の timer で同じ method で書く", async () => {
+      const page = await fetchOk(app, scenarios.markedConsole("writes", NAME, TAG));
+      const t = markedConsoleTokens(NAME, TAG);
+      const ran = run(scriptOf(page.body));
+      expect(ran.console).toEqual([
+        `log ${t["loading-log"]}`,
+        `info ${t["loading-info"]}`,
+        `warn ${t["loading-warn"]}`,
+        `error ${t["loading-error"]}`,
+      ]);
+      expect(ran.thrown).toBe(t.throw);
+      expect(ran.rejected).toEqual([t.reject]);
+      expect(ran.workers).toEqual([scenarios.markedConsoleWorker("writes", NAME, TAG)]);
+      // The late writes wait for the load event, then for a timer. A consumer that
+      // stops listening once the document has loaded keeps only the early ones.
+      expect(ran.timers).toEqual([]);
+      expect([...ran.listeners.keys()]).toEqual(["load"]);
+      ran.listeners.get("load")?.();
+      expect(ran.timers.map((timer) => timer.ms)).toEqual([0]);
+      for (const timer of ran.timers) timer.callback();
+      expect(ran.console.slice(4)).toEqual([
+        `log ${t["loaded-log"]}`,
+        `info ${t["loaded-info"]}`,
+        `warn ${t["loaded-warn"]}`,
+        `error ${t["loaded-error"]}`,
+      ]);
+    });
+
+    it("writes の iframe と worker は、それぞれの印を console.log で書く", async () => {
+      const page = await fetchOk(app, scenarios.markedConsole("writes", NAME, TAG));
+      const t = markedConsoleTokens(NAME, TAG);
+      const frame = await fetchOk(app, frameOf(page.body));
+      expect(run(scriptOf(frame.body)).console).toEqual([`log ${t.frame}`]);
+      const worker = await fetchOk(app, scenarios.markedConsoleWorker("writes", NAME, TAG));
+      expect(run(worker.body).console).toEqual([`log ${t.worker}`]);
+    });
+
+    it("writes は MARKED_CONSOLE_WAYS の経路ごとに、その経路の印を 1 度ずつ書き、ほかには何も書かない", async () => {
+      const t = markedConsoleTokens(NAME, TAG);
+      const written = await writtenBy("writes");
+      // The constant a consumer iterates names exactly the ways the page writes.
+      expect(written.map((entry) => entry.slice(entry.indexOf(" ") + 1)).sort()).toEqual(
+        MARKED_CONSOLE_WAYS.map((way) => t[way]).sort(),
+      );
+    });
+
+    it("silent はどこにも何も書かず、投げず、reject せず、後で書くものも残さない", async () => {
+      expect(await writtenBy("silent")).toEqual([]);
+      const page = await fetchOk(app, scenarios.markedConsole("silent", NAME, TAG));
+      const ran = run(scriptOf(page.body));
+      expect(ran.listeners.size).toBe(0);
+      expect(ran.timers).toEqual([]);
+      expect((await fetchOk(app, frameOf(page.body))).body).not.toContain("<script");
+    });
+
+    it.each(MARKED_CONSOLE_MODES)(
+      "%s は別サイトの iframe と dedicated worker を 1 つずつ持ち、icon を data: にする",
+      async (mode) => {
+        const page = await fetchOk(app, scenarios.markedConsole(mode, NAME, TAG, { embedOrigin: OTHER_SITE }));
+        expect(page.headers["content-type"]).toContain("text/html");
+        // The same shape for both, so a line a consumer files under the silent
+        // page cannot be explained by a part the silent page lacks.
+        expect(page.body.match(/<iframe /g)).toHaveLength(1);
+        expect(frameOf(page.body)).toBe(OTHER_SITE + scenarios.markedConsoleFrame(mode, NAME, TAG));
+        expect(run(scriptOf(page.body)).workers).toEqual([scenarios.markedConsoleWorker(mode, NAME, TAG)]);
+        const frame = await fetchOk(app, scenarios.markedConsoleFrame(mode, NAME, TAG));
+        expect(frame.headers["content-type"]).toContain("text/html");
+        const worker = await fetchOk(app, scenarios.markedConsoleWorker(mode, NAME, TAG));
+        expect(worker.headers["content-type"]).toContain("javascript");
+        // Without an icon a browser asks for /favicon.ico, this fixture answers
+        // 404, and Chrome writes that 404 into the page's console as an error —
+        // measured with Chrome 156, and a line the silent page must not have.
+        expect(page.body).toContain('<link rel="icon" href="data:,">');
+      },
+    );
+
+    it.each(MARKED_CONSOLE_MODES)("%s の embedOrigin は iframe だけを別の origin に移す", async (mode) => {
+      const here = await fetchOk(app, scenarios.markedConsole(mode, NAME, TAG));
+      const there = await fetchOk(app, scenarios.markedConsole(mode, NAME, TAG, { embedOrigin: OTHER_SITE }));
+      expect(frameOf(here.body)).toBe(scenarios.markedConsoleFrame(mode, NAME, TAG));
+      expect(there.body.replace(OTHER_SITE, "")).toBe(here.body);
+    });
+
+    it("印はどの URL にも、どの応答の本文にも綴られない", async () => {
+      // A body reaches an archive whether or not the console was kept, as a URL
+      // reaches its index. A token spelled in either would be found in every
+      // archive and say nothing about the console.
+      const tokens = Object.values(markedConsoleTokens(NAME, TAG));
+      const seen: string[] = [];
+      for (const mode of MARKED_CONSOLE_MODES) {
+        const url = scenarios.markedConsole(mode, NAME, TAG, { embedOrigin: OTHER_SITE });
+        const page = await fetchOk(app, url);
+        const parts = [scenarios.markedConsoleFrame(mode, NAME, TAG), scenarios.markedConsoleWorker(mode, NAME, TAG)];
+        seen.push(url, frameOf(page.body), ...run(scriptOf(page.body)).workers, page.body);
+        for (const part of parts) seen.push(part, (await fetchOk(app, part)).body);
+      }
+      expect(seen.flatMap((text) => tokens.filter((token) => text.includes(token)))).toEqual([]);
+    });
+
+    it.each(MARKED_CONSOLE_MODES)("%s の name は綴りの中の name だけを変える", async (mode) => {
+      for (const at of [scenarios.markedConsole, scenarios.markedConsoleFrame, scenarios.markedConsoleWorker]) {
+        const a = await fetchOk(app, at(mode, "alpha", TAG));
+        const b = await fetchOk(app, at(mode, "bravo", TAG));
+        expect(a.body.replaceAll("alpha", "NAME")).toBe(b.body.replaceAll("bravo", "NAME"));
+      }
+    });
+  });
 });
 
 describe("text a consumer has to keep as bytes", () => {
@@ -1217,6 +1426,11 @@ describe("malformed scenario parameters", () => {
     ["marked search result name with an uppercase letter", "/marked/search/Public/result?tag=t1"],
     ["marked search answer without q", "/marked/search/public/answer?tag=t1"],
     ["marked search answer without a tag", "/marked/search/public/answer?q=x"],
+    ["marked console mode it does not know", "/marked/console/loud/public?tag=t1"],
+    ["marked console without a tag", "/marked/console/writes/public"],
+    ["marked console embedOrigin with a path", "/marked/console/writes/public?tag=t1&embedOrigin=http%3A%2F%2Fb.test%2Fx"],
+    ["marked console frame name with an uppercase letter", "/marked/console/silent/Public/frame?tag=t1"],
+    ["marked console worker without a tag", "/marked/console/writes/public/worker.js"],
   ])("rejects %s", async (_name, url) => {
     expect((await app.inject(url)).statusCode).toBe(400);
   });
