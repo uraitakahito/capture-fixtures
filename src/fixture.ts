@@ -978,6 +978,12 @@ export interface RecordedRequest {
   cacheControl?: string;
   acceptLanguage?: string;
   /**
+   * What the sender called itself. A crawler can read robots.txt and fetch the
+   * page from two different programs, and only the receiving side can say
+   * whether they presented the same name.
+   */
+  userAgent?: string;
+  /**
    * The name the request came in under. Two instances of this fixture are two
    * sites to a browser only because their names differ, so this is what shows
    * an iframe from another site was fetched from there.
@@ -1017,6 +1023,7 @@ const RECORDED_HEADERS = [
   ["if-modified-since", "ifModifiedSince"],
   ["cache-control", "cacheControl"],
   ["accept-language", "acceptLanguage"],
+  ["user-agent", "userAgent"],
   ["host", "host"],
 ] as const;
 

@@ -332,6 +332,19 @@ describe("introspection", () => {
     expect(log.requests[0]?.host).toBe("capture-fixtures-b.test:8080");
   });
 
+  it("/__requests は要求ごとの User-Agent を残す —— 読む者と撮る者の名乗りを、受ける側で比べるため", async () => {
+    // robots.txt を読む要求と頁を取る要求は、別のプログラムから来ることがある。送る側の設定を読んでも、
+    // 実際に何を名乗ったかは分からない。違う値を 2 つ送るのは、1 つの値を全部に写す実装を落とすため。
+    await app.inject({ url: "/robots.txt", headers: { "user-agent": "reader/1.0" } });
+    await app.inject({ url: "/plain-html", headers: { "user-agent": "capturer/1.0" } });
+
+    const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
+    expect(log.requests.map((r) => [r.url, r.userAgent])).toEqual([
+      ["/robots.txt", "reader/1.0"],
+      ["/plain-html", "capturer/1.0"],
+    ]);
+  });
+
   it("/__requests does not record the introspection endpoints themselves", async () => {
     // Looking at the log must not change what the log says. Otherwise reading
     // "was the second request conditional?" means first subtracting the reads.
