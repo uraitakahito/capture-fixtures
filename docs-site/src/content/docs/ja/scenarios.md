@@ -687,7 +687,7 @@ URL ごとのリクエスト回数を、素のオブジェクトで返します�
 ### `GET /__requests`
 
 直近の `REQUEST_LOG_LIMIT` 件の要求を、古い順に `RequestLog`（`{ requests, truncated }`）で返します。
-1 件は `RecordedRequest` で、URL・メソッド・キャッシュを説明するヘッダ（`ifNoneMatch`・`ifModifiedSince`・`cacheControl`）・`acceptLanguage`・`host`、`/charset/echo` なら `bodySha256` と `bodyBytes` を持ちます。
+1 件は `RecordedRequest` で、URL・メソッド・キャッシュを説明するヘッダ（`ifNoneMatch`・`ifModifiedSince`・`cacheControl`）・`acceptLanguage`・`userAgent`・`host`、`/charset/echo` なら `bodySha256` と `bodyBytes` を持ちます。
 上限で何かを落とすと、`truncated` が true になります。
 
 数えるなら `/__request-counts` を使います。上限を超えると、このログは全部ではなくなります。

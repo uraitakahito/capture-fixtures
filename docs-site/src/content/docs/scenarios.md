@@ -754,7 +754,7 @@ the failure counter.
 The last `REQUEST_LOG_LIMIT` requests, oldest first, as a `RequestLog`:
 `{ requests, truncated }`. Each entry is a `RecordedRequest` — the URL, the
 method, the headers that explain caching (`ifNoneMatch`, `ifModifiedSince`,
-`cacheControl`), `acceptLanguage`, `host`, and, for `/charset/echo`,
+`cacheControl`), `acceptLanguage`, `userAgent`, `host`, and, for `/charset/echo`,
 `bodySha256` and `bodyBytes`. `truncated` turns true once the cap has dropped
 something.
 
