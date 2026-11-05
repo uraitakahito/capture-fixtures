@@ -15,7 +15,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version-file: .nvmrc
           cache: 'pnpm'
       # safe-chain wraps pnpm as well as npm, so the guard still applies after
       # the migration. The tool itself is installed with npm because that is
