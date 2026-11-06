@@ -31,6 +31,27 @@ Plain 200 HTML, no scripts, no sub-resources. Every other scenario is only
 meaningful against a control that is known to work; when a test fails, `/plain-html`
 answers "is the pipeline broken, or is this scenario doing its job?".
 
+### `/csp/strict` — a page whose policy forbids eval
+
+The same page as `/plain-html`, sent with
+`content-security-policy: script-src 'self'; report-uri /csp/report`. It exists for a script a
+consumer runs in the page: a library that compiles code with `new Function` behaves differently
+here, and the site it runs on hears about it.
+
+The policy sets `script-src` and no `default-src`. A `default-src` would also forbid inline styles,
+and BrowserHive's `hideScrollbars` (`page.addStyleTag`) would then fail the capture before the
+script runs.
+
+### `POST /csp/report` — what the browser told the site
+
+Where the page sends a report of each violation. It answers 204 and drops the body: the number of
+reports in `/__request-counts` is the assertion. A report reaches this route only because a script
+broke the policy, so 0 means none did, as long as a control on the same page has shown that a
+violation does arrive here.
+
+It is POST only, so it is not in `scenarios`, every entry of which a consumer can GET. The path and
+the type are exported as `CSP_REPORT`.
+
 ### `/client-side-redirect` → `/redirect-target` — client-side navigation
 
 Serves a page whose only content is `location.replace("/redirect-target")`, running at

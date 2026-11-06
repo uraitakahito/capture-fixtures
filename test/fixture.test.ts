@@ -6,7 +6,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHARSET_ECHO, CHARSET_FIXTURES } from "../src/charset.js";
-import { buildFixture, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
+import { buildFixture, CSP_REPORT, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
 import {
   MARKED_CONSOLE_MODES,
   MARKED_CONSOLE_WAYS,
@@ -1372,6 +1372,37 @@ describe("text a consumer has to keep as bytes", () => {
     const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
     expect(log.requests.at(-1)).not.toHaveProperty("bodySha256");
     expect(log.requests.at(-1)).not.toHaveProperty("bodyBytes");
+  });
+});
+
+describe("厳しい CSP のページ", () => {
+  it("/csp/strict は script-src と報告先だけを書く —— default-src を書くと hideScrollbars が先に落ちる", async () => {
+    const res = await fetchOk(app, scenarios.cspStrict);
+
+    expect(res.headers["content-type"]).toContain("text/html");
+    expect(res.headers["content-security-policy"]).toBe("script-src 'self'; report-uri /csp/report");
+  });
+
+  it("/csp/report は報告を 204 で受け、/__request-counts と /__requests に残す", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: CSP_REPORT.path,
+      headers: { "content-type": CSP_REPORT.type },
+      payload: JSON.stringify({ "csp-report": { "violated-directive": "script-src" } }),
+    });
+
+    expect(res.statusCode).toBe(204);
+    const counts = (await fetchOk(app, "/__request-counts")).json<Record<string, number>>();
+    expect(counts[CSP_REPORT.path]).toBe(1);
+    const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
+    expect(log.requests.map((r) => [r.url, r.method])).toEqual([[CSP_REPORT.path, "POST"]]);
+  });
+
+  it("/csp/strict を読むだけでは、報告の数は増えない", async () => {
+    await fetchOk(app, scenarios.cspStrict);
+
+    const counts = (await fetchOk(app, "/__request-counts")).json<Record<string, number>>();
+    expect(counts[CSP_REPORT.path]).toBeUndefined();
   });
 });
 

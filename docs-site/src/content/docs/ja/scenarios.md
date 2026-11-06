@@ -32,6 +32,25 @@ const url = `http://${meadowIp}:8080` + scenarios.failsThenSucceeds(2, "retry-bu
 テストが落ちたとき、`/plain-html` が
 **「基盤が壊れているのか、そのシナリオが仕事をしているのか」**を切り分けます。
 
+### `/csp/strict` ― eval を禁じるページ
+
+中身は `/plain-html` と同じで、
+`content-security-policy: script-src 'self'; report-uri /csp/report` を付けて返します。
+利用側がページの中で走らせるスクリプトのためのページです。`new Function` でコードを作るライブラリは、
+ここでは振る舞いが変わり、そのことが相手のサイトに伝わります。
+
+`script-src` だけを書き、`default-src` は書きません。`default-src` はインラインの style も禁じるので、
+BrowserHive の `hideScrollbars`（`page.addStyleTag`）がスクリプトより先に取り込みを落とします。
+
+### `POST /csp/report` ― ブラウザが相手のサイトに伝えたこと
+
+違反のたびに、ページが報告を送る先です。204 を返し、本文は捨てます。確かめるのは
+`/__request-counts` の報告の数です。報告がここへ来るのはスクリプトがポリシーを破ったときだけなので、
+同じページの対照で違反がここへ届くと示してあれば、0 は誰も破らなかったことを意味します。
+
+POST だけなので `scenarios` には入れません（`scenarios` の項目は全部 GET できます）。パスと型は
+`CSP_REPORT` で export しています。
+
 ### `/client-side-redirect` → `/redirect-target` ― クライアント側ナビゲーション
 
 中身が `location.replace("/redirect-target")` だけのページを返します。パース時点で走ります。
