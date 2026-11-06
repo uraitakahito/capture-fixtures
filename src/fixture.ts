@@ -21,6 +21,20 @@ import {
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
+ * Where the page at `/csp/strict` sends a report when its policy is broken. POST only, so it is
+ * not in `scenarios`, every entry of which a consumer can GET.
+ */
+export const CSP_REPORT = { path: "/csp/report", type: "application/csp-report" } as const;
+/**
+ * Forbids eval and inline script, and says where to report a violation.
+ *
+ * `script-src` alone, with no `default-src`: a `default-src` would also forbid inline styles, and
+ * then BrowserHive's `hideScrollbars` (`page.addStyleTag`) would fail the capture before the page
+ * shows anything about the script a consumer came here to test.
+ */
+const CSP_STRICT_POLICY = `script-src 'self'; report-uri ${CSP_REPORT.path}`;
+const CSP_STRICT_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>strict csp</title></head><body><h1>strict csp</h1></body></html>`;
+/**
  * A page the browser will revalidate on every visit.
  *
  * `no-cache` means "store it, but ask before reusing it" — so the second and
@@ -1160,6 +1174,18 @@ export function buildFixture(): FastifyInstance {
   app.get("/health", () => ({ ok: true }));
 
   app.get("/plain-html", (_request, reply) => reply.type("text/html").send(PLAIN_HTML));
+  app.get("/csp/strict", (_request, reply) =>
+    reply.header("content-security-policy", CSP_STRICT_POLICY).type("text/html").send(CSP_STRICT_HTML),
+  );
+  // Whether a report arrived is the whole answer, and /__request-counts already gives it, so the
+  // body is read and dropped. Fastify answers 415 to a type it has no parser for.
+  void app.register((scope, _options, registered) => {
+    scope.addContentTypeParser(CSP_REPORT.type, { parseAs: "buffer" }, (_request, _body, done) => {
+      done(null);
+    });
+    scope.post(CSP_REPORT.path, (_request, reply) => reply.code(204).send());
+    registered();
+  });
   app.get("/cacheable", (request, reply) => {
     reply.header("cache-control", "no-cache").header("etag", CACHEABLE_ETAG);
     // 304 carries no body by definition — that is the whole point of the

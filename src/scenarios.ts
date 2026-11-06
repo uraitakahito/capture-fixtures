@@ -28,6 +28,11 @@ export const scenarios = {
   /** Plain 200 HTML, no script and no sub-resources — the success baseline. */
   plainHtml: "/plain-html",
   /**
+   * The same page under a policy that forbids eval and reports violations to
+   * `CSP_REPORT.path`, so a report in `/__request-counts` means a script broke it.
+   */
+  cspStrict: "/csp/strict",
+  /**
    * Revalidates on every visit (`no-cache` + `ETag`), so a repeat navigation
    * gets a bodyless `304`. The only route here that can produce one.
    */
