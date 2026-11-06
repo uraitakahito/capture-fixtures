@@ -209,10 +209,10 @@ const largeStorageHtml = (bytes: number): string => {
 /**
  * The image variants a 1280px / DPR 1 capture never asks for.
  *
- * BrowserHive's `autofetch` exists to pull these in: at DPR 1 the browser picks
- * one candidate per element and never requests the rest, so a Retina replay
- * finds them missing. Until this page existed the behaviour had nothing to act
- * on — its e2e ran against `/plain-html`, which has no images at all, and could
+ * The `autofetch` script (capture-scripts) exists to pull these in: at DPR 1 the
+ * browser picks one candidate per element and never requests the rest, so a
+ * Retina replay finds them missing. Until this page existed the script had nothing
+ * to act on — its e2e ran against `/plain-html`, which has no images at all, and could
  * only assert that autofetch had run, never what it fetched.
  *
  * One shape per element, so a failure names itself:
