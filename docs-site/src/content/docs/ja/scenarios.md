@@ -106,8 +106,8 @@ BrowserHive の `autoscroll` は「スクロールして 250ms 待ち、`scrollY
 
 1280px・DPR 1 のキャプチャは、要素ごとにちょうど 1 つの候補しか選びません。
 残りは一度も要求されないので、**Retina でリプレイすると欠けている** ―
-BrowserHive の `autofetch` behavior が防ごうとしているのはこの失敗です。
-このページができるまで、その behavior には働きかける対象がありませんでした。
+[capture-scripts](https://github.com/uraitakahito/capture-scripts) の `autofetch` スクリプトが防ごうとしているのはこの失敗です。
+このページができるまで、そのスクリプトには働きかける対象がありませんでした。
 試験は画像を 1 枚も持たない `/plain-html` に対して走っており、
 「autofetch が走った」ことしか主張できませんでした。
 

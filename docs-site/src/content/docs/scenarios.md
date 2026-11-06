@@ -111,8 +111,8 @@ capture viewport: an `<img srcset>` with 1x/2x/3x, a `<picture>` whose
 
 A capture at 1280px and DPR 1 picks exactly one candidate per element. The
 others are never requested, so a Retina replay finds them missing — the failure
-BrowserHive's `autofetch` behaviour exists to prevent. Before this page, that
-behaviour had nothing to act on: its test ran against `/plain-html`, which has
+the `autofetch` script ([capture-scripts](https://github.com/uraitakahito/capture-scripts)) exists to prevent. Before this page, that
+script had nothing to act on: its test ran against `/plain-html`, which has
 no images, and could only assert that autofetch had run.
 
 `hero.svg` is the control. The browser requests it unprompted, so a run where

@@ -49,8 +49,9 @@ export const scenarios = {
    * Image variants a 1280px / DPR 1 capture never requests on its own —
    * `srcset`, `<picture><source>`, `data-srcset` and `poster`.
    *
-   * Exercises BrowserHive's `autofetch`: without it only the control image
-   * (`hero.svg`) arrives, because the browser picks one candidate per element.
+   * Exercises the `autofetch` script (capture-scripts): without it only the
+   * control image (`hero.svg`) arrives, because the browser picks one candidate
+   * per element.
    */
   responsiveImages: "/responsive-images",
 
