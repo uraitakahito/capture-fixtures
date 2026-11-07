@@ -10,7 +10,7 @@
  * answer injects it with vi.mock("node:dns/promises").
  *
  * The same file lives in 6 repos (browserhive, capture-ledger, capture-scheduler, capture-fixtures,
- * dashboard, wacz-validator); this repo keeps its comments in English. Change all six together.
+ * capture-workbench, wacz-validator); this repo keeps its comments in English. Change all six together.
  */
 import dns from "node:dns";
 import dnsPromises from "node:dns/promises";
