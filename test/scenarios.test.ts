@@ -51,6 +51,9 @@ describe("scenarios URL contract", () => {
     expect(scenarios.markedConsoleWorker("silent", "public", "c2")).toBe(
       "/marked/console/silent/public/worker.js?tag=c2",
     );
+    expect(scenarios.echoText('MARK p@ss+9z&é"<')).toBe("/echo/text?v=MARK%20p%40ss%2B9z%26%C3%A9%22%3C");
+    expect(scenarios.echoJson('MARK p@ss+9z&é"<')).toBe("/echo/json?v=MARK%20p%40ss%2B9z%26%C3%A9%22%3C");
+    expect(scenarios.echoRedirect('MARK p@ss+9z&é"<')).toBe("/echo/redirect?v=MARK%20p%40ss%2B9z%26%C3%A9%22%3C");
   });
 
   it("url-encodes counter keys so parallel tests stay isolated", () => {
@@ -125,6 +128,9 @@ describe("every scenario reaches the fixture", () => {
     ["markedConsoleFrame", scenarios.markedConsoleFrame("silent", "public", "contract")],
     ["markedConsoleWorker", scenarios.markedConsoleWorker("writes", "public", "contract")],
     ["markedAsset", scenarios.markedAsset("pixel.svg", "secret", "contract")],
+    ["echoText", scenarios.echoText("contract")],
+    ["echoJson", scenarios.echoJson("contract")],
+    ["echoRedirect", scenarios.echoRedirect("contract")],
     ["asset", scenarios.asset("hero.svg")],
   ];
 

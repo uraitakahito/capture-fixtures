@@ -10,6 +10,15 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { CHARSET_ECHO, CHARSET_FIXTURES } from "./charset.js";
 import { BUILD_INFO } from "./generated/version.js";
 import {
+  LOGIN_FORM_HTML,
+  LOGIN_REFUSED_HTML,
+  LOGIN_SUBMIT,
+  echoBytesBody,
+  echoTextHtml,
+  loginAfterHtml,
+  loginSessionToken,
+} from "./login-echo.js";
+import {
   MARKED_CONSOLE_METHODS,
   MARKED_CONSOLE_MODES,
   MARKED_WINDOW_WAYS,
@@ -902,6 +911,13 @@ const MAX_FAN_OUT = 200;
 const MAX_LEAF_ID = 200;
 const MAX_HOPS = 20;
 const MAX_FAIL_TIMES = 100;
+/**
+ * Ceiling for `POST /login/submit`, whose body stays in the request log as text.
+ * A form's few values fit many times over. At Fastify's default limit a full log
+ * could hold a gigabyte, which is the unpredictable cost `RecordedRequest` is
+ * bounded to avoid.
+ */
+const MAX_LOGIN_BODY_BYTES = 64 * 1024;
 
 /**
  * A JSON Schema for a set of integer parameters, each with a range.
@@ -949,6 +965,18 @@ const slugs = (names: string[], required: string[] = names): Record<string, unkn
  * different page from the one asked for.
  */
 const ORIGIN = { type: "string", pattern: "^https?://[a-z0-9.-]+(:[0-9]{1,5})?$" } as const;
+
+/**
+ * A JSON Schema for the value an `/echo/*` route repeats. Unlike `SLUG`, it has no
+ * pattern: a value whose spelling changes when it is encoded is the point. Only
+ * empty is refused, for the reason `numbers()` gives: a page with no value in it
+ * would pass a test that searches an archive for the value.
+ */
+const ECHO_QUERY = {
+  type: "object",
+  properties: { v: { type: "string", minLength: 1 } },
+  required: ["v"],
+} as const;
 
 /** Trickle `bytes` bytes of "a" over roughly `overMs` milliseconds, in ~10 chunks. */
 async function* slowBody(bytes: number, overMs: number): AsyncGenerator<Buffer> {
@@ -1004,13 +1032,28 @@ export interface RecordedRequest {
    */
   host?: string;
   /**
+   * The headers a request carries a secret in, as they arrived. A consumer that
+   * keeps a value out of its archive still has to send it, and only the receiving
+   * side can say it did: an archive with no value in it is also what a page that
+   * never sent one leaves behind.
+   */
+  xApiKey?: string;
+  authorization?: string;
+  cookie?: string;
+  /**
    * The SHA-256 (hex) and the length of the body the request carried. Only a
-   * route that reads its body as bytes fills these — {@link CHARSET_ECHO}'s —
-   * so a consumer that records request bodies can compare its copy with what
-   * arrived.
+   * route that reads its body as bytes fills these — {@link CHARSET_ECHO}'s and
+   * {@link LOGIN_SUBMIT}'s — so a consumer that records request bodies can compare
+   * its copy with what arrived.
    */
   bodySha256?: string;
   bodyBytes?: number;
+  /**
+   * The body as text, as it arrived: {@link LOGIN_SUBMIT}'s only. A digest says a
+   * body came through whole, not which values it held, and a form's values are
+   * what a test of a hidden value has to read back.
+   */
+  bodyText?: string;
 }
 
 /**
@@ -1039,6 +1082,9 @@ const RECORDED_HEADERS = [
   ["accept-language", "acceptLanguage"],
   ["user-agent", "userAgent"],
   ["host", "host"],
+  ["x-api-key", "xApiKey"],
+  ["authorization", "authorization"],
+  ["cookie", "cookie"],
 ] as const;
 
 /**
@@ -1094,6 +1140,12 @@ export function buildFixture(): FastifyInstance {
   const hits = new Map<string, number>();
   // Per-key failure counter backing /fails-then-succeeds.
   const failureCounts = new Map<string, number>();
+  // Each login's note, by its session token, backing /login/after. That page has
+  // to come by the note after a redirect: the token is a digest, so the note cannot
+  // be read back from the cookie, and a URL that spelled it would be one more place
+  // for the value to be. Keyed rather than one "last note", so two logins against
+  // one fixture each get their own page whatever order they land in.
+  const loginNotes = new Map<string, string>();
   // The last REQUEST_LOG_LIMIT requests, with headers (/__requests).
   const requests: RecordedRequest[] = [];
   let truncated = false;
@@ -1677,24 +1729,100 @@ export function buildFixture(): FastifyInstance {
     });
   }
 
-  // The POST the page sends. No parser here decodes its body: it is read as
-  // bytes, and its digest and length go into the request's log entry.
+  // The POSTs whose bodies the log keeps account of: the page's above, and a
+  // login's. No parser here decodes a body: it is read as bytes, and its digest and
+  // length go into the request's log entry.
   void app.register((scope, _options, registered) => {
     scope.removeAllContentTypeParsers();
     scope.addContentTypeParser("*", { parseAs: "buffer" }, (_request, body, done) => {
       done(null, body);
     });
-    scope.post<{ Body: Buffer | undefined }>(CHARSET_ECHO.path, (request, reply) => {
-      const body = request.body ?? Buffer.alloc(0);
-      const entry = logged.get(request.raw);
+    const logBody = (raw: IncomingMessage, body: Buffer): RecordedRequest | undefined => {
+      const entry = logged.get(raw);
       if (entry !== undefined) {
         entry.bodySha256 = createHash("sha256").update(body).digest("hex");
         entry.bodyBytes = body.length;
       }
+      return entry;
+    };
+    scope.post<{ Body: Buffer | undefined }>(CHARSET_ECHO.path, (request, reply) => {
+      logBody(request.raw, request.body ?? Buffer.alloc(0));
       return reply.code(204).send();
     });
+    // A login (src/login-echo.ts). A body with no note is refused rather than
+    // welcomed by nothing: a page with no value in it would pass a test that
+    // searches an archive for the value. It is logged all the same, so the log
+    // can say what the form did send.
+    scope.post<{ Body: Buffer | undefined }>(
+      LOGIN_SUBMIT.path,
+      { bodyLimit: MAX_LOGIN_BODY_BYTES },
+      (request, reply) => {
+        const body = request.body ?? Buffer.alloc(0);
+        const text = body.toString("utf8");
+        const entry = logBody(request.raw, body);
+        if (entry !== undefined) entry.bodyText = text;
+        const note = new URLSearchParams(text).get("note");
+        if (note === null || note === "") {
+          return reply.code(400).type("text/plain").send("note is required");
+        }
+        const token = loginSessionToken(note);
+        loginNotes.set(token, note);
+        return reply.header("set-cookie", `session=${token}; Path=/`).redirect("/login/after", 302);
+      },
+    );
     registered();
   });
+
+  // Pages for testing that a consumer keeps a secret out of what it stores
+  // (src/login-echo.ts). The value is often not ASCII, so each document says UTF-8
+  // in its header as well as in its meta tag.
+  const HTML_UTF8 = "text/html; charset=utf-8";
+  app.get("/login/form", (_request, reply) => reply.type(HTML_UTF8).send(LOGIN_FORM_HTML));
+
+  // Welcomes only a browser that brought its cookie back, so a note in this
+  // document is also evidence the cookie came back. Anyone else gets a 403: not a
+  // 404, because the route is there and the login is what is missing, and not a
+  // 401, which would have to name a scheme a browser may then prompt for.
+  app.get("/login/after", (request, reply) => {
+    const session = /(?:^|;\s*)session=([^;]*)/.exec(request.headers.cookie ?? "")?.[1];
+    const note = session === undefined ? undefined : loginNotes.get(session);
+    if (note === undefined) return reply.code(403).type(HTML_UTF8).send(LOGIN_REFUSED_HTML);
+    return reply.type(HTML_UTF8).send(loginAfterHtml(note));
+  });
+
+  app.get<{ Querystring: { v: string } }>(
+    "/echo/text",
+    { schema: { querystring: ECHO_QUERY } },
+    (request, reply) => reply.type(HTML_UTF8).send(echoTextHtml(request.query.v)),
+  );
+
+  app.get<{ Querystring: { v: string } }>(
+    "/echo/json",
+    { schema: { querystring: ECHO_QUERY } },
+    (request, reply) => reply.send({ v: request.query.v }),
+  );
+
+  // The value comes in a header, as an API key does, so the URL holds none of it:
+  // what a consumer does to this body it can only have learned from the body.
+  app.get<{ Headers: { "x-api-key": string } }>(
+    "/echo/bytes",
+    {
+      schema: {
+        headers: {
+          type: "object",
+          properties: { "x-api-key": { type: "string", minLength: 1 } },
+          required: ["x-api-key"],
+        },
+      },
+    },
+    (request, reply) => reply.type("application/octet-stream").send(echoBytesBody(request.headers["x-api-key"])),
+  );
+
+  app.get<{ Querystring: { v: string } }>(
+    "/echo/redirect",
+    { schema: { querystring: ECHO_QUERY } },
+    (request, reply) => reply.redirect(`/echo/text?v=${encodeURIComponent(request.query.v)}`, 302),
+  );
 
   app.get<{ Querystring: { bytes?: number } }>(
     "/large-storage",
@@ -1748,6 +1876,7 @@ export function buildFixture(): FastifyInstance {
   app.post("/__reset", () => {
     hits.clear();
     failureCounts.clear();
+    loginNotes.clear();
     requests.length = 0;
     truncated = false;
     return { ok: true };

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildFixture } from "../src/fixture.js";
+import { LOGIN_SUBMIT } from "../src/login-echo.js";
 import { scenarios } from "../src/scenarios.js";
 
 /**
@@ -31,6 +32,9 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive's e2e for a page's own console (CAPTURE-18, not written yet)
  *                                                markedConsole("writes" | "silent", …, { embedOrigin }),
  *                                                markedConsoleFrame, markedConsoleWorker   ← see below
+ *   browserhive's e2e for a secret kept out of an archive (CAPTURE-166, not written yet)
+ *                                                loginForm, loginAfter, LOGIN_SUBMIT, echoText, echoJson,
+ *                                                echoBytes, echoRedirect   ← see below
  *
  * The last row is the exception to "actually passes": `/large-storage` and the
  * consumer's storage cap were written together, so the caller lands after this
@@ -89,11 +93,20 @@ import { scenarios } from "../src/scenarios.js";
  * console, which can carry the page's text. The frame and worker rows are what
  * the e2e looks for in a request log.
  *
+ * So are the login and echo rows (2026-11-07): `/login/*` and `/echo/*` were
+ * written for BrowserHive's test that a secret it is handed stays out of what it
+ * stores, which lands with its next release (CAPTURE-166). That test's value has
+ * to change its spelling when encoded, so the rows spell one: a pattern added to
+ * `v`, to `note` or to the header would refuse it here first. `loginAfter` has no
+ * session in this row, so it answers 403, which is not what this suite watches.
+ *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
  * not about whatever BrowserHive passes today.
  */
 describe("values BrowserHive passes today", () => {
+  const RESPELLED = 'MARK p@ss+9z&é"<';
+
   let app: ReturnType<typeof buildFixture>;
 
   beforeEach(() => {
@@ -159,10 +172,31 @@ describe("values BrowserHive passes today", () => {
     ["markedConsole writes, the page a policy withholds", scenarios.markedConsole("writes", "secret", "c3")],
     ["markedConsoleFrame writes", scenarios.markedConsoleFrame("writes", "public", "c1")],
     ["markedConsoleWorker writes", scenarios.markedConsoleWorker("writes", "public", "c1")],
+    ["loginForm", scenarios.loginForm],
+    ["loginAfter", scenarios.loginAfter],
+    ["echoText with a value that encoding respells", scenarios.echoText(RESPELLED)],
+    ["echoJson with a value that encoding respells", scenarios.echoJson(RESPELLED)],
+    ["echoRedirect with a value that encoding respells", scenarios.echoRedirect(RESPELLED)],
   ])("%s is not refused", async (name, path) => {
     // 404, 503 and 302 are all legitimate answers; 400 means a bound is too
     // tight and the submodule bump would break the downstream suite.
     expect((await app.inject(path)).statusCode, `${name} → ${path}`).not.toBe(400);
+  });
+
+  // These two need more than a path, so they cannot be rows above.
+  it("echoBytes with a value that encoding respells in its header is not refused", async () => {
+    const res = await app.inject({ url: scenarios.echoBytes, headers: { "x-api-key": RESPELLED } });
+    expect(res.statusCode).not.toBe(400);
+  });
+
+  it("LOGIN_SUBMIT with a value that encoding respells in its body is not refused", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: LOGIN_SUBMIT.path,
+      headers: { "content-type": LOGIN_SUBMIT.type },
+      payload: new URLSearchParams({ user: "e2e", password: RESPELLED, note: RESPELLED }).toString(),
+    });
+    expect(res.statusCode).not.toBe(400);
   });
 });
 

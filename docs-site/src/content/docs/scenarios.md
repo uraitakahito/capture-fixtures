@@ -752,6 +752,73 @@ The page reads the empty answer too. Chrome aborts a fetch whose 204 nobody
 reads (`net::ERR_ABORTED`), and a consumer then sees the POST fail rather than
 finish, with no request body to record.
 
+## Values a consumer must keep out of what it stores
+
+For consumers that are handed a secret and told not to store it — the `secrets` of
+a BrowserHive capture are what these were written for. A page that uses a secret
+has to send it, and the site it goes to can send it back, so the value travels
+further than the field it was typed into. Each route here adds one of those places,
+with a value you chose (`src/login-echo.ts`).
+
+Choose a value that encoding respells. `MARK p@ss+9z&é"<` reads differently in a
+URL, in a form's body, in JSON and in HTML, so a consumer that searches for one
+spelling leaves the others behind.
+
+Whether the value went out is read from the other end: `/__requests` keeps the
+headers and the form's body as they arrived. Without that, an archive with no value
+in it is also what a page that never sent one leaves behind.
+
+A route that repeats a value refuses an empty one with a 400. A page with no value
+in it would pass a test that searches an archive for the value.
+
+### `/login/form`, `POST /login/submit`, `/login/after` — a login
+
+`/login/form` is an ordinary form with `#user` (already filled in, with
+`LOGIN_DEFAULT_USER`), `#password`, `#note` and a submit button `#go`. A browser
+that submits it sends the POST as a navigation of the page. `user` is not a secret,
+so it is the control in that body: a consumer that replaced the others still has
+this one.
+
+`POST /login/submit` reads the body as `application/x-www-form-urlencoded`. The
+entry in `/__requests` carries it as `bodyText`, next to `bodySha256` and
+`bodyBytes`. It answers 302 to `/login/after` with
+`Set-Cookie: session=<token>; Path=/`, where the token is `loginSessionToken(note)`.
+It is POST only, so it is not in `scenarios`; the path and the type are exported as
+`LOGIN_SUBMIT`.
+
+The token is a digest of the note and contains no part of it. A consumer that hides
+the note replaces it wherever it is spelled, so a token holding the note would
+vanish with it, and a test could not tell whether the consumer also took the
+cookie's own value for a secret. Take the spelling from `loginSessionToken` rather
+than writing it out.
+
+`/login/after` says `welcome <note>`, HTML-escaped, and has one link,
+`/echo/text?v=plain`, which holds no value. Only a browser that brought the cookie
+back gets this page; anything else is a 403. So the note in the document, like the
+`cookie` in the request's log entry, says the cookie came back. The notes live in
+the server process, one per session, until `POST /__reset`.
+
+### `/echo/text?v=`, `/echo/json?v=` — the value in a text body
+
+`/echo/text` repeats `v` once in a document, HTML-escaped. `/echo/json` answers
+`{ "v": v }`. A site sending a value back as text, for a consumer to replace in
+place. The value has no pattern to match: `scenarios.echoText` percent-encodes it,
+and the route gets back what you passed.
+
+### `/echo/bytes` — the value in a body that is not text
+
+The request's `x-api-key` header between the bytes `00 01 FF`, as
+`application/octet-stream`. Those bytes are not UTF-8, so a consumer cannot read the
+body as text and write it back unchanged, and it is left with dropping it. Without
+the header the answer is a 400.
+
+The header is sent back as the bytes it arrived in. A browser sends `é` in a header
+as the one byte `E9`, not as UTF-8. `echoBytesBody(value)` spells the whole body.
+
+### `/echo/redirect?v=` — the value in a response header
+
+A 302 to `/echo/text?v=<v>`, with `v` percent-encoded in `Location`.
+
 ## Introspection
 
 Three test-only endpoints. They exist because *how many times* something was
@@ -775,18 +842,23 @@ the failure counter.
 The last `REQUEST_LOG_LIMIT` requests, oldest first, as a `RequestLog`:
 `{ requests, truncated }`. Each entry is a `RecordedRequest` — the URL, the
 method, the headers that explain caching (`ifNoneMatch`, `ifModifiedSince`,
-`cacheControl`), `acceptLanguage`, `userAgent`, `host`, and, for `/charset/echo`,
-`bodySha256` and `bodyBytes`. `truncated` turns true once the cap has dropped
-something.
+`cacheControl`), `acceptLanguage`, `userAgent`, `host`, the headers a secret travels
+in (`xApiKey`, `authorization`, `cookie`), and, for `/charset/echo` and
+`/login/submit`, `bodySha256` and `bodyBytes`. `/login/submit` also carries the body
+itself as `bodyText`. `truncated` turns true once the cap has dropped something.
+
+The header values and `bodyText` are what arrived, in the clear, so send test values
+only.
 
 To count, use `/__request-counts`: past the cap, this log is no longer
 everything.
 
 ### `POST /__reset`
 
-Clears both the hit counters and the flaky state.
+Clears the hit counters, the flaky state, the request log and the logins'
+notes.
 
-Call it **between tests, not once per suite**. Both counters live in the server
+Call it **between tests, not once per suite**. All of it lives in the server
 process, so a container shared across a run accumulates state; the previous
 test's hits are indistinguishable from this one's without a reset.
 
