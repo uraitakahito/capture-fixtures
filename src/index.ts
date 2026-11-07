@@ -7,6 +7,14 @@ export type { RecordedRequest, RequestLog } from "./fixture.js";
 export { scenarios, type Scenarios } from "./scenarios.js";
 export { CHARSET_ECHO, CHARSET_FIXTURES, type CharsetBody, type CharsetPath } from "./charset.js";
 export {
+  LOGIN_DEFAULT_USER,
+  LOGIN_SUBMIT,
+  echoBytesBody,
+  echoTextHtml,
+  loginAfterHtml,
+  loginSessionToken,
+} from "./login-echo.js";
+export {
   MARKED_CONSOLE_METHODS,
   MARKED_CONSOLE_MODES,
   MARKED_CONSOLE_WAYS,

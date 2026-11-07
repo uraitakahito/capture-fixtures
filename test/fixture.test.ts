@@ -309,7 +309,7 @@ describe("introspection", () => {
         "if-modified-since": "Sun, 02 Aug 2026 00:00:00 GMT",
         // Deliberately not recorded: a bounded set is what keeps the memory
         // cost of a long-running dev container predictable.
-        cookie: "session=secret",
+        referer: "http://site.test/",
       },
     });
 
@@ -320,7 +320,29 @@ describe("introspection", () => {
     expect(only?.cacheControl).toBe("no-cache");
     expect(only?.ifModifiedSince).toBe("Sun, 02 Aug 2026 00:00:00 GMT");
     expect(only?.method).toBe("GET");
-    expect(Object.keys(only ?? {})).not.toContain("cookie");
+    expect(Object.keys(only ?? {})).not.toContain("referer");
+  });
+
+  it("/__requests keeps the headers a secret travels in, because only the receiver can say it was sent", async () => {
+    // A consumer that keeps a value out of its archive still has to send it. Were
+    // the value not here, an archive with no value in it could just as well be
+    // from a page that never sent one, and a test of hiding it would prove nothing.
+    await app.inject({
+      url: "/plain-html",
+      headers: { "x-api-key": "key-1", authorization: "Bearer token-1", cookie: "session=value-1" },
+    });
+    await fetchOk(app, "/plain-html");
+
+    const log = (await fetchOk(app, "/__requests")).json<RequestLog>();
+    expect(log.requests[0]).toMatchObject({
+      xApiKey: "key-1",
+      authorization: "Bearer token-1",
+      cookie: "session=value-1",
+    });
+    // The control: a request carrying none of them records none, not empty ones.
+    for (const field of ["xApiKey", "authorization", "cookie"]) {
+      expect(log.requests[1]).not.toHaveProperty(field);
+    }
   });
 
   it("/__requests keeps the Host, the name a request came in under", async () => {

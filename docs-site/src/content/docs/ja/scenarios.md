@@ -684,6 +684,57 @@ icon が無いと、ブラウザは `/favicon.ico` を取りに行き、この f
 ページは空の答えも読む。誰も読まない 204 の fetch を、Chrome は打ち切る（`net::ERR_ABORTED`）。
 そうなると消費者には POST が終わらずに失敗したと見え、記録する要求の本文が無くなる。
 
+## 残してはいけない値
+
+シークレットを渡され、残さないよう頼まれる消費者のためのもの。BrowserHive の取り込みの `secrets` のために書いた。
+シークレットを使うページはそれを送るしかなく、送った先のサイトが送り返すこともある。だから値は、打ち込んだ欄より遠くへ行く。
+ここの route は、その行き先を 1 つずつ足し、そこに選んだ値を置く（`src/login-echo.ts`）。
+
+値は、符号化で綴りが変わるものを選ぶ。`MARK p@ss+9z&é"<` は URL・form の本文・JSON・HTML でそれぞれ違う綴りになるので、1 つの綴りしか探さない消費者は残りを取りこぼす。
+
+値が送られたかは、受ける側で読む。`/__requests` はヘッダと form の本文を届いたまま残す。
+これが無いと、値の無い archive は、値を一度も送らなかったページの archive と区別できない。
+
+値を繰り返す route は、空の値を 400 で断る。値の無いページは、archive から値を探す試験を通ってしまう。
+
+### `/login/form`・`POST /login/submit`・`/login/after` ― ログイン
+
+`/login/form` はふつうの form で、`#user`（`LOGIN_DEFAULT_USER` が入っている）、`#password`、`#note`、送信のボタン `#go` を持つ。
+これを送信するブラウザは、ページの遷移として POST を送る。
+`user` はシークレットではないので、その本文の中の対照になる。ほかを置き換えた消費者にも、これは残る。
+
+`POST /login/submit` は本文を `application/x-www-form-urlencoded` として読む。
+`/__requests` のその要求は本文を `bodyText` に持ち、`bodySha256` と `bodyBytes` も持つ。
+答えは `/login/after` への 302 で、`Set-Cookie: session=<token>; Path=/` を付ける。token は `loginSessionToken(note)`。
+POST だけなので `scenarios` には入れず、パスと型を `LOGIN_SUBMIT` で export している。
+
+token は note のダイジェストで、note のどの部分も含まない。
+note を隠す消費者は、note がどう綴られていても置き換える。token が note を含むと一緒に消えてしまい、消費者が Cookie の値そのものもシークレットとして扱ったのかを、試験が言えなくなる。
+綴りは書き写さず、`loginSessionToken` から取る。
+
+`/login/after` は `welcome <note>`（HTML をエスケープする）と、リンクを 1 本持つ。リンク先は `/echo/text?v=plain` で、値を含まない。
+このページを受け取るのは Cookie を持ち帰ったブラウザだけで、それ以外には 403 を返す。
+だから文書の中の note は、要求ログの `cookie` と同じく、Cookie が戻ってきたことを示す。
+note はサーバのプロセスの中に session ごとに置かれ、`POST /__reset` まで残る。
+
+### `/echo/text?v=`・`/echo/json?v=` ― 文字の本文の中の値
+
+`/echo/text` は `v` を HTML をエスケープして文書の中に 1 度書く。`/echo/json` は `{ "v": v }` を返す。
+値を文字で送り返すサイトで、消費者はその場で置き換えることになる。
+値に決まった形は無い。`scenarios.echoText` がパーセントエンコードし、route には渡した値のまま届く。
+
+### `/echo/bytes` ― 文字でない本文の中の値
+
+要求の `x-api-key` ヘッダを、`00 01 FF` のバイトで挟んで `application/octet-stream` で返す。
+このバイトは UTF-8 にならないので、消費者は本文を文字として読み戻して変えずに書き戻すことができず、本文を落とすしかない。
+ヘッダが無ければ 400 を返す。
+
+ヘッダは、届いたバイト列のまま返す。ブラウザはヘッダの `é` を、UTF-8 ではなく 1 バイトの `E9` で送る。本文全体の綴りは `echoBytesBody(value)` が言う。
+
+### `/echo/redirect?v=` ― 応答のヘッダの中の値
+
+`/echo/text?v=<v>` への 302。`Location` の `v` はパーセントエンコードする。
+
 ## イントロスペクション
 
 テスト専用のエンドポイントが 3 つ。
@@ -706,17 +757,19 @@ URL ごとのリクエスト回数を、素のオブジェクトで返します�
 ### `GET /__requests`
 
 直近の `REQUEST_LOG_LIMIT` 件の要求を、古い順に `RequestLog`（`{ requests, truncated }`）で返します。
-1 件は `RecordedRequest` で、URL・メソッド・キャッシュを説明するヘッダ（`ifNoneMatch`・`ifModifiedSince`・`cacheControl`）・`acceptLanguage`・`userAgent`・`host`、`/charset/echo` なら `bodySha256` と `bodyBytes` を持ちます。
+1 件は `RecordedRequest` で、URL・メソッド・キャッシュを説明するヘッダ（`ifNoneMatch`・`ifModifiedSince`・`cacheControl`）・`acceptLanguage`・`userAgent`・`host`・シークレットが通るヘッダ（`xApiKey`・`authorization`・`cookie`）、`/charset/echo` と `/login/submit` なら `bodySha256` と `bodyBytes` を持ちます。`/login/submit` は本文そのものも `bodyText` に持ちます。
 上限で何かを落とすと、`truncated` が true になります。
+
+ヘッダの値と `bodyText` は届いたままの平文なので、試験用の値だけを送ってください。
 
 数えるなら `/__request-counts` を使います。上限を超えると、このログは全部ではなくなります。
 
 ### `POST /__reset`
 
-リクエスト件数と失敗カウンタを両方クリアします。
+リクエスト件数・失敗カウンタ・要求ログ・ログインの note をクリアします。
 
 **スイートごとではなく、テストごとに**呼んでください。
-どちらのカウンタもサーバプロセス内にあるので、
+どれもサーバプロセス内にあるので、
 実行全体で 1 つのコンテナを共有すると状態が積み上がります。
 リセットしなければ、前のテストのヒットと今回のヒットは区別がつきません。
 

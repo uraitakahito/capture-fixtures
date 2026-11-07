@@ -453,6 +453,34 @@ export const scenarios = {
    */
   charset: "/charset/",
 
+  /**
+   * A login form: `user` (already filled in, `LOGIN_DEFAULT_USER`), `password` and
+   * `note`, which a browser posts to `LOGIN_SUBMIT.path`. For consumers that keep
+   * a value out of what they store: type it in, and the POST's body carries it.
+   * The POST answers with a 302 to {@link scenarios.loginAfter} and
+   * `Set-Cookie: session=<loginSessionToken(note)>; Path=/`. `/__requests` keeps
+   * the body as it arrived, as `bodyText`.
+   */
+  loginForm: "/login/form",
+  /**
+   * Where a login lands: `welcome <note>`, HTML-escaped, and one link with no value
+   * in it. Only a browser that brought its session cookie back gets it; anything
+   * else is a 403, so the note in this document says the cookie came back.
+   */
+  loginAfter: "/login/after",
+  /** A document that repeats `v`, HTML-escaped. A site sending a value back as text. */
+  echoText: (v: string): string => `/echo/text?v=${encodeURIComponent(v)}`,
+  /** `{ "v": v }` as `application/json`. The same, as JSON. */
+  echoJson: (v: string): string => `/echo/json?v=${encodeURIComponent(v)}`,
+  /**
+   * The request's `x-api-key` header between bytes that are not text, as
+   * `application/octet-stream`: `echoBytesBody(value)`. A value a consumer cannot
+   * replace in place. Without the header it is a 400.
+   */
+  echoBytes: "/echo/bytes",
+  /** A 302 to {@link scenarios.echoText}, with `v` percent-encoded in `Location`. */
+  echoRedirect: (v: string): string => `/echo/redirect?v=${encodeURIComponent(v)}`,
+
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */
   asset: (path: string): string => `/assets/${path}`,
 } as const;
