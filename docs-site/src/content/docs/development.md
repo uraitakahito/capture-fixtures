@@ -6,7 +6,7 @@ description: Building and testing capture-fixtures, how consumers pin it as a su
 ## Commands
 
 ```sh
-pnpm run check   # typecheck + lint + test
+pnpm run check   # what it runs: "check" in package.json
 pnpm run build   # emit dist/
 pnpm start       # run dist/serve.js
 ```
