@@ -6,7 +6,7 @@ description: capture-fixtures のビルドとテスト、利用側からの subm
 ## コマンド
 
 ```sh
-pnpm run check   # typecheck + lint + test
+pnpm run check   # 中身は package.json の "check"
 pnpm run build   # dist/ を出力
 pnpm start       # dist/serve.js を実行
 ```
