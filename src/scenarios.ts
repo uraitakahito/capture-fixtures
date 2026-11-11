@@ -142,6 +142,16 @@ export const scenarios = {
   failsThenSucceeds: (failTimes: number, key: string): string =>
     `/fails-then-succeeds?failTimes=${String(failTimes)}&key=${encodeURIComponent(key)}`,
   /**
+   * Pages whose text changes on every read for `key` (CAPTURE-167): `news`
+   * rotates one headline per read, `dateline` moves only its "updated" line, and
+   * `injection` moves its "updated" line and, from the second read on, carries
+   * an instruction aimed at whatever reads the difference. `POST /__reset`
+   * starts every key over.
+   */
+  changingNews: (key: string): string => `/changing/news?key=${encodeURIComponent(key)}`,
+  changingDateline: (key: string): string => `/changing/dateline?key=${encodeURIComponent(key)}`,
+  changingInjection: (key: string): string => `/changing/injection?key=${encodeURIComponent(key)}`,
+  /**
    * Holds the page's main thread `holdMs` at a time for `repeatForMs` — makes a
    * consumer's per-operation timeout expire against a real browser.
    */

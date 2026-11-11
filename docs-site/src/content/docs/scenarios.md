@@ -819,6 +819,31 @@ as the one byte `E9`, not as UTF-8. `echoBytesBody(value)` spells the whole body
 
 A 302 to `/echo/text?v=<v>`, with `v` percent-encoded in `Location`.
 
+## Pages that change on every read
+
+For a consumer that captures the same page twice and compares the text
+(capture-ledger's "changes since last time", CAPTURE-167). Each page counts
+reads per `key`, and **the n-th read is a function of n alone** — nothing reads
+the clock. The three pages differ in the kind of change, so a consumer can
+write a different expectation for each. `POST /__reset` starts every `key` over.
+
+### `/changing/news?key=` — a notice list that rotates one headline per read
+
+Five dated headlines; each read drops the oldest and adds a new one. The
+example of "the content changed".
+
+### `/changing/dateline?key=` — a page where only the "updated" line moves
+
+The body is the same on every read; only the line "更新: 2026-11-01 04:00"
+moves one day per read. The example of "nothing a reader cares about changed".
+
+### `/changing/injection?key=` — a page carrying an instruction for the reader of the difference
+
+The "updated" line moves as on `/changing/dateline`, and from the second read
+on the page adds a line addressed to an AI that reads the difference. A
+consumer that has a language model read the difference uses it to check that
+the model does not follow instructions found in the page's text.
+
 ## Introspection
 
 Three test-only endpoints. They exist because *how many times* something was
@@ -855,8 +880,8 @@ everything.
 
 ### `POST /__reset`
 
-Clears the hit counters, the flaky state, the request log and the logins'
-notes.
+Clears the hit counters, the flaky state, the read counts of the pages that
+change on every read, the request log and the logins' notes.
 
 Call it **between tests, not once per suite**. All of it lives in the server
 process, so a container shared across a run accumulates state; the previous
