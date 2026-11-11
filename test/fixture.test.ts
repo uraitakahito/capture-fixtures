@@ -6,7 +6,13 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHARSET_ECHO, CHARSET_FIXTURES } from "../src/charset.js";
-import { buildFixture, CSP_REPORT, REQUEST_LOG_LIMIT, type RequestLog } from "../src/fixture.js";
+import {
+  buildFixture,
+  CHANGING_INJECTION_LINE,
+  CSP_REPORT,
+  REQUEST_LOG_LIMIT,
+  type RequestLog,
+} from "../src/fixture.js";
 import {
   MARKED_CONSOLE_MODES,
   MARKED_CONSOLE_WAYS,
@@ -267,6 +273,58 @@ describe("stateful fails-then-succeeds", () => {
     expect((await app.inject("/fails-then-succeeds?failTimes=1&key=b")).statusCode).toBe(503);
     // `a` has now had its one failure and succeeds.
     expect((await app.inject("/fails-then-succeeds?failTimes=1&key=a")).statusCode).toBe(200);
+  });
+});
+
+describe("読むたびに変わるページ（CAPTURE-167）", () => {
+  // 撮った 2 本を比べる側が、違いの種類ごとに期待を書けるように、どのページも n 回目の中身が決まっている
+  const textOf = (html: string): string[] =>
+    html
+      .replace(/<[^>]+>/g, "\n")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+  const changed = (before: string[], after: string[]) => ({
+    added: after.filter((line) => !before.includes(line)),
+    removed: before.filter((line) => !after.includes(line)),
+  });
+
+  it("news は読むたびに見出しが 1 つ入れ替わる", async () => {
+    const first = textOf((await fetchOk(app, "/changing/news?key=n1")).body);
+    const second = textOf((await fetchOk(app, "/changing/news?key=n1")).body);
+    const diff = changed(first, second);
+    expect(diff.added).toEqual(["2026-11-06 インフルエンザの予防接種の受付を始めました"]);
+    expect(diff.removed).toEqual(["2026-11-01 市立図書館の開館時間を延長します"]);
+  });
+
+  it("dateline は更新の行だけが動き、ほかの文字は同じ", async () => {
+    const first = textOf((await fetchOk(app, "/changing/dateline?key=d1")).body);
+    const second = textOf((await fetchOk(app, "/changing/dateline?key=d1")).body);
+    expect(changed(first, second)).toEqual({
+      added: ["更新: 2026-11-02 04:00"],
+      removed: ["更新: 2026-11-01 04:00"],
+    });
+  });
+
+  it("injection は 2 回目から、差分を読む者への指示を持つ", async () => {
+    const first = (await fetchOk(app, "/changing/injection?key=i1")).body;
+    const second = (await fetchOk(app, "/changing/injection?key=i1")).body;
+    expect(first).not.toContain(CHANGING_INJECTION_LINE);
+    expect(second).toContain(CHANGING_INJECTION_LINE);
+  });
+
+  it("key ごとに数え、/__reset で 1 回目に戻る", async () => {
+    const a1 = (await fetchOk(app, "/changing/news?key=k-a")).body;
+    // 2 回目は進んでいる（進まなければ、下の 2 つの確かめは何も区別しない）
+    expect((await fetchOk(app, "/changing/news?key=k-a")).body).not.toBe(a1);
+    // 別の key はまだ 1 回目
+    expect((await fetchOk(app, "/changing/news?key=k-b")).body).toBe(a1);
+    await app.inject({ method: "POST", url: "/__reset" });
+    expect((await fetchOk(app, "/changing/news?key=k-a")).body).toBe(a1);
+  });
+
+  it("知らない種類は 400", async () => {
+    expect((await app.inject("/changing/nope?key=x")).statusCode).toBe(400);
   });
 });
 

@@ -15,6 +15,9 @@ describe("scenarios URL contract", () => {
     expect(scenarios.fetchLate(0, 5000)).toBe("/fetch-late?afterMs=0&takesMs=5000");
     expect(scenarios.ticker()).toBe("/ticker?periodMs=250&forMs=30000");
     expect(scenarios.ticker(50, 100)).toBe("/ticker?periodMs=50&forMs=100");
+    expect(scenarios.changingNews("a b")).toBe("/changing/news?key=a%20b");
+    expect(scenarios.changingDateline("d")).toBe("/changing/dateline?key=d");
+    expect(scenarios.changingInjection("i")).toBe("/changing/injection?key=i");
     expect(scenarios.compressibleBody(5_000_000)).toBe("/compressible-body?bytes=5000000");
     expect(scenarios.warcNoise(250_000, 3)).toBe("/warc/noise?bytes=250000&seed=3");
     expect(scenarios.warcRollover(8, 250_000)).toBe("/warc/rollover?resources=8&bytes=250000");
@@ -99,6 +102,9 @@ describe("every scenario reaches the fixture", () => {
     ["httpStatus", scenarios.httpStatus(503)],
     ["serverRedirectChain", scenarios.serverRedirectChain(2)],
     ["failsThenSucceeds", scenarios.failsThenSucceeds(1, "contract")],
+    ["changingNews", scenarios.changingNews("contract")],
+    ["changingDateline", scenarios.changingDateline("contract")],
+    ["changingInjection", scenarios.changingInjection("contract")],
     ["blockMainThread", scenarios.blockMainThread(10, 20)],
     ["fetchLate", scenarios.fetchLate(0, 50)],
     ["ticker", scenarios.ticker(50, 100)],
