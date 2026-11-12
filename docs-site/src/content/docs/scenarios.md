@@ -506,6 +506,32 @@ Every day is a new URL on the same host, so a same-host rule alone walks it unti
 the depth cap stops it — and then reports the cap as the reason. The calendar
 ends at day 20 so a crawler with no cap at all still finishes.
 
+### `/links/frameset` and the other frame pages — links one document down
+
+The hub's four links live in `/links/frame/menu` (each with `target="right"`),
+and the pages below load that document into a frame. None of their top documents
+holds an `<a`, so a consumer that reads only the top document finds no link and,
+asked to follow, stops after one page without complaint.
+
+| Page | Top document | Where the four links are |
+|---|---|---|
+| `/links/frameset` | `<frameset>` of `/links/frame/menu` and `/links/frame/empty` | the menu frame |
+| `/links/frameset-nested` | `<frameset>` whose only frame is `/links/frameset` | two documents down |
+| `/links/iframe` | `<iframe src="/links/frame/menu">` | a same-origin iframe |
+| `/links/iframe-other?embedOrigin=` | the same iframe, served by `embedOrigin` | a frame on another origin |
+| `/links/iframe-blank` | a script-made `<iframe>` with no `src` | its `about:blank` document (absolute hrefs) |
+
+`embedOrigin` is required on `/links/iframe-other` (400 without it), so the page
+cannot quietly turn into `/links/iframe`. Point it at another instance of this
+fixture. A page script cannot read a document from another origin, so a
+consumer that reads frames through the page finds nothing there — that is the
+control for the other four.
+
+:::caution[The top documents contain no `<a` at all]
+As on `/links/js`, an anchor slipping into a top document would let a consumer
+that never looks inside frames pass. The tests hold every top document to zero.
+:::
+
 ### `/links/hidden` — reachable, linked, and forbidden
 
 A plain page, linked from the hub and disallowed by `/robots.txt`.
