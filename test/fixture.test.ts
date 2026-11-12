@@ -694,6 +694,57 @@ describe("link scenarios", () => {
     expect(res.body).toContain('createElement("a")');
   });
 
+  // The frame pages. Each top document must stay free of anchors: one slipping
+  // in would let a reader of the top document alone pass for a reader of frames.
+  it.each(["/links/frameset", "/links/frameset-nested", "/links/iframe", "/links/iframe-blank"])(
+    "%s serves no anchor in the top document",
+    async (path) => {
+      const res = await fetchOk(app, path);
+      expect(res.body).not.toContain("<a ");
+    },
+  );
+
+  it("/links/frame/menu holds exactly the hub's four links, aimed at the right frame", async () => {
+    const res = await fetchOk(app, "/links/frame/menu");
+    const hrefs = [...res.body.matchAll(/<a href="([^"]+)" target="right">/g)].map((m) => m[1]);
+    expect(hrefs).toEqual(["/links/leaf/1", "/links/leaf/2", "/links/leaf/3", "/links/hidden"]);
+    expect(res.body.match(/<a /g)).toHaveLength(4);
+  });
+
+  it("/links/frame/empty holds no link", async () => {
+    const res = await fetchOk(app, "/links/frame/empty");
+    expect(res.body).not.toContain("<a ");
+  });
+
+  it("/links/frameset puts the menu and the empty pane in frames", async () => {
+    const res = await fetchOk(app, "/links/frameset");
+    expect(res.body).toContain('<frame name="menu" src="/links/frame/menu">');
+    expect(res.body).toContain('<frame name="right" src="/links/frame/empty">');
+  });
+
+  it("/links/frameset-nested frames the frameset", async () => {
+    const res = await fetchOk(app, "/links/frameset-nested");
+    expect(res.body).toContain('<frame name="inner" src="/links/frameset">');
+  });
+
+  it("/links/iframe holds the menu in a same-origin iframe", async () => {
+    const res = await fetchOk(app, "/links/iframe");
+    expect(res.body).toContain('<iframe name="menu" src="/links/frame/menu"');
+  });
+
+  it("/links/iframe-other puts the menu on the origin it was given", async () => {
+    const res = await fetchOk(app, "/links/iframe-other?embedOrigin=http%3A%2F%2Fother.test%3A8080");
+    expect(res.body).toContain('<iframe name="menu" src="http://other.test:8080/links/frame/menu"');
+    expect(res.body).not.toContain("<a ");
+  });
+
+  it("/links/iframe-blank writes the links into a script-made frame with no src", async () => {
+    const res = await fetchOk(app, "/links/iframe-blank");
+    expect(res.body).toContain('createElement("iframe")');
+    expect(res.body).not.toContain("<iframe");
+    expect(res.body).toContain('"/links/leaf/1", "/links/leaf/2", "/links/leaf/3", "/links/hidden"');
+  });
+
   it("/links/js-late puts the caller's deadline in the timer", async () => {
     const res = await fetchOk(app, "/links/js-late?afterMs=250");
     expect(res.body).not.toContain("<a ");
@@ -1512,6 +1563,8 @@ describe("malformed scenario parameters", () => {
     ["failTimes not a number", "/fails-then-succeeds?failTimes=abc"],
     ["afterMs not a number", "/links/js-late?afterMs=abc"],
     ["afterMs over the ceiling", "/links/js-late?afterMs=999999"],
+    ["iframe-other without embedOrigin", "/links/iframe-other"],
+    ["iframe-other embedOrigin not an origin", "/links/iframe-other?embedOrigin=javascript%3Aalert(1)"],
     ["fetch-late takesMs not a number", "/fetch-late?takesMs=abc"],
     ["fetch-late takesMs over the ceiling", "/fetch-late?takesMs=999999999"],
     ["ticker periodMs below the floor", "/ticker?periodMs=0"],

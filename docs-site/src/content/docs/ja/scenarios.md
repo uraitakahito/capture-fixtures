@@ -483,6 +483,30 @@ trap は URL の前方一致で、`skipped.invalid` はドメインで落とす�
 歩き続け、そしてその上限を止まった理由として報告する。20 日目で終えるのは、上限を持たない
 クローラでも終わるようにするため。
 
+### `/links/frameset` ほか、フレームの頁 ― 1 つ下の文書にあるリンク
+
+hub の 4 本は `/links/frame/menu` にあり（どれも `target="right"`）、下の頁がその文書を
+フレームに読み込む。どの頁も一番上の文書には `<a` が 1 つも無い。だから一番上の文書だけを
+読む利用側はリンクを見つけず、辿るよう頼まれても、何も言わずに 1 ページで止まる。
+
+| 頁 | 一番上の文書 | 4 本がある所 |
+|---|---|---|
+| `/links/frameset` | `/links/frame/menu` と `/links/frame/empty` の `<frameset>` | menu のフレーム |
+| `/links/frameset-nested` | 唯一のフレームが `/links/frameset` の `<frameset>` | 2 つ下の文書 |
+| `/links/iframe` | `<iframe src="/links/frame/menu">` | 同じ origin の iframe |
+| `/links/iframe-other?embedOrigin=` | 同じ iframe を `embedOrigin` から配る | 別 origin のフレーム |
+| `/links/iframe-blank` | script が作った `src` の無い `<iframe>` | その `about:blank` の文書（href は絶対） |
+
+`/links/iframe-other` の `embedOrigin` は必須（無ければ 400）。黙って `/links/iframe` に
+化けないようにするため。この fixture の別のインスタンスを指す。頁の script は別 origin の
+文書を読めないので、頁を通してフレームを読む利用側はここで何も見つけない。これが残りの 4 つの
+対照になる。
+
+:::caution[一番上の文書に `<a` は 1 つも無い]
+`/links/js` と同じく、一番上の文書に `<a` が紛れ込むと、フレームの中を見ない利用側も通って
+しまう。試験が、どの一番上の文書も 0 本に保つ。
+:::
+
 ### `/links/hidden` ― 到達でき、リンクされ、そして禁じられている
 
 素のページ。hub からリンクされ、`/robots.txt` が `Disallow` している。

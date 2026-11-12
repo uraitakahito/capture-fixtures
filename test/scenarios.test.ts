@@ -117,6 +117,7 @@ describe("every scenario reaches the fixture", () => {
     ["linkCycle", scenarios.linkCycle("a")],
     ["linkFanOut", scenarios.linkFanOut(3)],
     ["linkTrap", scenarios.linkTrap(1)],
+    ["linkIframeOther", scenarios.linkIframeOther("http://capture-fixtures-1-b.browserhive:8080")],
     ["markedPage", scenarios.markedPage("secret", "contract")],
     ["markedText", scenarios.markedText("secret", "contract")],
     ["markedServerRedirect", scenarios.markedServerRedirect(1, "secret", "contract")],

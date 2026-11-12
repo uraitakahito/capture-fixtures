@@ -283,6 +283,41 @@ export const scenarios = {
   /** Reachable, linked from {@link scenarios.linkHub}, and forbidden by {@link scenarios.robotsTxt}. */
   linkHidden: "/links/hidden",
   /**
+   * The hub's four links (`target="right"`), as the document inside a frame.
+   *
+   * Not a seed: the frame pages below load it, and a crawler that reads only
+   * the top document never sees these links.
+   */
+  linkFrameMenu: "/links/frame/menu",
+  /** A frame document with no links — the other pane of {@link scenarios.linkFrameset}. */
+  linkFrameEmpty: "/links/frame/empty",
+  /**
+   * A `<frameset>` of {@link scenarios.linkFrameMenu} and
+   * {@link scenarios.linkFrameEmpty}. The top document holds no `<a`.
+   *
+   * A crawler reading only the top document finds no link here and stops after
+   * one page; one reading same-origin frames finds the hub's four.
+   */
+  linkFrameset: "/links/frameset",
+  /** A frameset whose only frame is {@link scenarios.linkFrameset} — the links two documents down. */
+  linkFramesetNested: "/links/frameset-nested",
+  /** {@link scenarios.linkFrameMenu} in a same-origin `<iframe>`. The top document holds no `<a`. */
+  linkIframe: "/links/iframe",
+  /**
+   * {@link scenarios.linkFrameMenu} in an `<iframe>` served by `origin` —
+   * another instance of this fixture.
+   *
+   * The page's own script cannot read that document, so a reader of
+   * same-origin frames finds no link. Without `origin` the route answers 400.
+   */
+  linkIframeOther: (origin: string): string =>
+    `/links/iframe-other?embedOrigin=${encodeURIComponent(origin)}`,
+  /**
+   * A script-made `<iframe>` with no `src`, its `about:blank` document holding
+   * the hub's four links (absolute hrefs). The served HTML holds no `<a`.
+   */
+  linkIframeBlank: "/links/iframe-blank",
+  /**
    * `Disallow: /links/hidden` and `Crawl-delay: 3`. The only robots policy here.
    *
    * Fixed rather than parameterised, because a crawler fetches `/robots.txt`

@@ -419,6 +419,101 @@ const LINK_LEAF_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>
 <h1>leaf</h1>
 </body></html>`;
 
+/**
+ * What the frame pages hold: the hub's four links, aimed at the frame named
+ * `right` the way a frameset menu is written.
+ *
+ * Never a seed on its own. A crawler meets it only as the document inside a
+ * frame, so the links are found only by one that reads frames.
+ */
+const LINK_FRAME_MENU_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>menu</title></head><body>
+<h1>menu</h1>
+<a href="/links/leaf/1" target="right">leaf 1</a>
+<a href="/links/leaf/2" target="right">leaf 2</a>
+<a href="/links/leaf/3" target="right">leaf 3</a>
+<a href="/links/hidden" target="right">hidden</a>
+</body></html>`;
+
+/** The other half of a frameset: a document with no links, as a content pane starts out. */
+const LINK_FRAME_EMPTY_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>empty</title></head><body>
+<h1>empty</h1>
+</body></html>`;
+
+/**
+ * The hub's links, moved one document down: a `<frameset>` of the menu and an
+ * empty pane.
+ *
+ * **The top document holds no `<a` at all.** A crawler that reads only the top
+ * document finds nothing and, asked to follow links, stops after one page —
+ * successfully, with nothing to say. One that reads the frames finds the hub's
+ * four.
+ */
+const LINK_FRAMESET_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>frameset</title></head>
+<frameset cols="30%,70%">
+<frame name="menu" src="/links/frame/menu">
+<frame name="right" src="/links/frame/empty">
+</frameset>
+</html>`;
+
+/**
+ * {@link LINK_FRAMESET_HTML} one level further down: a frameset whose only frame
+ * is that frameset. The links sit two documents below the top.
+ */
+const LINK_FRAMESET_NESTED_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>frameset-nested</title></head>
+<frameset rows="100%">
+<frame name="inner" src="/links/frameset">
+</frameset>
+</html>`;
+
+/** The menu in a same-origin `<iframe>` — the same document as the frameset's, through the other element. */
+const LINK_IFRAME_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>iframe</title></head><body>
+<h1>iframe</h1>
+<iframe name="menu" src="/links/frame/menu" width="320" height="240"></iframe>
+</body></html>`;
+
+/**
+ * The menu in an `<iframe>` served by `origin` — another instance of this
+ * fixture, under another name.
+ *
+ * A page script cannot read a document from another origin, so a crawler that
+ * reads frames through the page finds nothing here, and one that reads every
+ * frame some other way finds four. The page cannot fall back to its own origin:
+ * the route refuses a request without `embedOrigin`.
+ */
+const linkIframeOtherHtml = (origin: string): string =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>iframe-other</title></head><body>
+<h1>iframe-other</h1>
+<iframe name="menu" src="${origin}/links/frame/menu" width="320" height="240"></iframe>
+</body></html>`;
+
+/**
+ * An `<iframe>` with no `src`, made by script, with the hub's four links written
+ * into its `about:blank` document.
+ *
+ * Nothing in the served HTML matches `<a`, and the frame never loads a URL of
+ * its own. The hrefs are absolute because a blank document's base URL is the
+ * page's only by inheritance, which a reader of frames should not have to know.
+ */
+const LINK_IFRAME_BLANK_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>iframe-blank</title></head><body>
+<h1>iframe-blank</h1>
+<script>
+addEventListener("DOMContentLoaded", function () {
+  var frame = document.createElement("iframe");
+  frame.width = "320";
+  frame.height = "240";
+  document.body.appendChild(frame);
+  var doc = frame.contentDocument;
+  var paths = ["/links/leaf/1", "/links/leaf/2", "/links/leaf/3", "/links/hidden"];
+  for (var i = 0; i < paths.length; i++) {
+    var el = doc.createElement("a");
+    el.href = location.origin + paths[i];
+    el.textContent = paths[i];
+    doc.body.appendChild(el);
+  }
+});
+</script>
+</body></html>`;
+
 /** Reachable and linked from the hub, but forbidden by `/robots.txt`. */
 const LINK_HIDDEN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>hidden</title></head><body>
 <h1>hidden</h1>
@@ -1336,6 +1431,34 @@ export function buildFixture(): FastifyInstance {
   app.get("/links/js", (_request, reply) => reply.type("text/html").send(LINK_JS_HTML));
   app.get("/links/hidden", (_request, reply) => reply.type("text/html").send(LINK_HIDDEN_HTML));
   app.get("/links/rules", (_request, reply) => reply.type("text/html").send(LINK_RULES_HTML));
+
+  // The hub's links one document down, inside frames. The top documents hold no
+  // anchor; the frame documents are never seeds on their own.
+  app.get("/links/frame/menu", (_request, reply) =>
+    reply.type("text/html").send(LINK_FRAME_MENU_HTML));
+  app.get("/links/frame/empty", (_request, reply) =>
+    reply.type("text/html").send(LINK_FRAME_EMPTY_HTML));
+  app.get("/links/frameset", (_request, reply) => reply.type("text/html").send(LINK_FRAMESET_HTML));
+  app.get("/links/frameset-nested", (_request, reply) =>
+    reply.type("text/html").send(LINK_FRAMESET_NESTED_HTML));
+  app.get("/links/iframe", (_request, reply) => reply.type("text/html").send(LINK_IFRAME_HTML));
+  app.get("/links/iframe-blank", (_request, reply) =>
+    reply.type("text/html").send(LINK_IFRAME_BLANK_HTML));
+  app.get<{ Querystring: { embedOrigin: string } }>(
+    "/links/iframe-other",
+    {
+      schema: {
+        querystring: {
+          type: "object",
+          properties: { embedOrigin: ORIGIN },
+          // Required: without it the iframe would be same-origin, and the page
+          // would quietly turn into /links/iframe.
+          required: ["embedOrigin"],
+        },
+      },
+    },
+    (request, reply) => reply.type("text/html").send(linkIframeOtherHtml(request.query.embedOrigin)),
+  );
 
   // Served from a route rather than `site/`, which is mounted under /assets/.
   // A crawler asks for /robots.txt at the root or not at all.
