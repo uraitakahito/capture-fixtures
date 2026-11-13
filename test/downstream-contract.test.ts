@@ -37,15 +37,17 @@ import { scenarios } from "../src/scenarios.js";
  *                                                loginForm, loginAfter, LOGIN_SUBMIT, echoText, echoJson,
  *                                                echoBytes, echoRedirect   ← see below
  *
- * The `largeStorage` row is the exception to "actually passes": `/large-storage`
- * and the consumer's storage cap were written together, so the caller lands after this
- * release. It is recorded now because the argument is what set
+ * The `largeStorage` row was the exception to "actually passes" when it was
+ * recorded: `/large-storage` and the consumer's storage cap were written
+ * together, so the caller landed after that release, in BrowserHive v8.8.0. It
+ * was recorded ahead of the caller because the argument is what set
  * `MAX_STORAGE_BYTES` — leaving it out would let a later tightening pass here
  * and break the caller it was sized for.
  *
  * The settle rows are the same shape (2026-09-13): `/fetch-late` and `/ticker`
- * were written for BrowserHive's post-load wait, whose e2e lands with the
- * consumer's next release. Recorded now for the same reason. So are the next two:
+ * were written for BrowserHive's post-load wait, whose e2e landed in BrowserHive
+ * v10.1.0 (the `fetchLate` calls) and v10.2.0 (the rest). Recorded ahead of the
+ * caller for the same reason. So were the next two:
  * `ticker(250, 1500)` is a DOM that keeps changing for 1.5 s and then stops,
  * `blockMainThread(100, 1200)` a run of long tasks; the wait must outlast both.
  * (`linkJsLate(1500)` was recorded here first and never passed: one change
@@ -53,7 +55,7 @@ import { scenarios } from "../src/scenarios.js";
  *
  * The marked rows are that shape again (2026-09-26): `/marked/*` was written
  * for BrowserHive's test that a page it was told not to keep leaves nothing
- * behind, which lands with its next release. BrowserHive adds a suffix to each
+ * behind, which landed in BrowserHive v17.0.0. BrowserHive adds a suffix to each
  * tag so reruns against one fixture stay apart; the values here are the
  * shortest it sends.
  *
@@ -64,7 +66,7 @@ import { scenarios } from "../src/scenarios.js";
  *
  * The deny rows are that shape again (2026-09-26): the popup, kinds, worker and
  * WebSocket pages were written for BrowserHive's test that a request its policy
- * denies never leaves the capturing machine, which lands with its next release.
+ * denies never leaves the capturing machine, which landed in BrowserHive v18.0.0.
  *
  * So is the storm row (2026-10-02): `/fetch-storm` and `/compressible-body` were
  * written for BrowserHive's test that stopping a recording while response
@@ -74,12 +76,12 @@ import { scenarios } from "../src/scenarios.js";
  *
  * So is the rollover row (2026-10-31): `/warc/rollover` and `/warc/noise` were
  * written for BrowserHive's test that its recorder starts a new WARC file at a
- * size limit, which lands with its next release. Eight images of 250,000 bytes
+ * size limit, which landed in BrowserHive v21.0.0. Eight images of 250,000 bytes
  * cross that stack's 1 MiB limit exactly once; the row spells those numbers.
  *
  * So are the search rows (2026-11-02): `/marked/search` was written for
  * BrowserHive's test that it keeps a page before and after a script types into
- * it, which lands with its next release and is being written alongside. The
+ * it, which landed in BrowserHive v23.0.0. The
  * names are the marked rows' two (`secret` for the page a policy withholds),
  * the tags are short like theirs, and the query is text with a space and
  * characters outside ASCII: what a script types is anything, and a pattern
@@ -87,7 +89,7 @@ import { scenarios } from "../src/scenarios.js";
  *
  * So are the console rows (2026-11-04): `/marked/console` was written for
  * BrowserHive's test that it keeps what the page it captures writes to its own
- * console, every way of `MARKED_CONSOLE_WAYS`, which lands with its next release
+ * console, every way of `MARKED_CONSOLE_WAYS`, which landed in BrowserHive v24.0.0
  * (CAPTURE-18). It captures both twins with the iframe on its set's b site, so
  * the rows spell the longest b origin, as the embedOrigin row does. The secret
  * row is for the rule that a page withheld by policy leaves no lines of its
@@ -96,7 +98,7 @@ import { scenarios } from "../src/scenarios.js";
  *
  * So are the login and echo rows (2026-11-07): `/login/*` and `/echo/*` were
  * written for BrowserHive's test that a secret it is handed stays out of what it
- * stores, which lands with its next release (CAPTURE-166). That test's value has
+ * stores, which landed in BrowserHive v29.0.0 (CAPTURE-166). That test's value has
  * to change its spelling when encoded, so the rows spell one: a pattern added to
  * `v`, to `note` or to the header would refuse it here first. `loginAfter` has no
  * session in this row, so it answers 403, which is not what this suite watches.
