@@ -1,13 +1,14 @@
 /**
- * Typed URL contract for every consumer (BrowserHive today) so that scenario
- * paths live in exactly one place and cannot drift between repos.
+ * Typed URL contract for every consumer (BrowserHive and capture-ledger, which
+ * each pin this repo as a submodule) so that scenario paths live in exactly one
+ * place and cannot drift between repos.
  *
  * Names say what the route DOES, and parameters say what they MEASURE. A path
  * is read far more often than it is typed, and the reader is usually trying to
  * work out why a test failed.
  *
  * Static scenarios are plain strings; parameterised ones are builder functions.
- * Prefix each with the fixture origin, e.g. `` `http://${ip}:8080` + scenarios.ok ``.
+ * Prefix each with the fixture origin, e.g. `` `http://${ip}:8080` + scenarios.plainHtml ``.
  */
 import type { MarkedConsoleMode, MarkedWindowWay } from "./marked.js";
 
@@ -38,7 +39,7 @@ export const scenarios = {
    */
   cacheable: "/cacheable",
   /**
-   * DOMContentLoaded runs `location.replace(redirectTarget)`.
+   * An inline script runs `location.replace(redirectTarget)` as the page is parsed.
    *
    * Destroys the JavaScript execution context mid-capture. A server-side 302
    * does NOT reproduce this — the browser follows that before a page exists.
@@ -131,7 +132,7 @@ export const scenarios = {
   largeStorage: (bytes: number): string => `/large-storage?bytes=${String(bytes)}`,
   /** Responds with an arbitrary HTTP status — exercises the non-2xx branch. */
   httpStatus: (code: number): string => `/http-status/${String(code)}`,
-  /** Server-side 302 chain of `hops`, ending at {@link scenarios.redirectTarget}. */
+  /** Server-side 302 chain of `hops` + 1 redirects, ending at {@link scenarios.redirectTarget}. */
   serverRedirectChain: (hops: number): string => `/server-redirect-chain/${String(hops)}`,
   /**
    * Fails (503) the first `failTimes` requests for `key`, then succeeds (200).

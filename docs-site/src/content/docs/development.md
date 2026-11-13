@@ -66,14 +66,17 @@ pnpm run site:dev     # local preview
 pnpm run site:check   # build + verify every doc reference resolves
 ```
 
-`site:check` runs in CI on every pull request. It catches two kinds of drift the
-build alone would not:
+`site:check` runs in CI on every pull request that touches the sources or the
+docs (the `paths` of `.github/workflows/site.yml`). It catches two kinds of
+drift:
 
 - a code fence whose `file=` attribute names a region that was renamed
 - a `src/` path written in prose that points at a file that was moved
 
-Both are the same failure — documentation that still builds green while
-describing code that is gone.
+Both are the same failure — documentation that describes code that is gone. The
+build never sees the second, and whether it stops on the first has changed with
+the Astro and Starlight versions (the measurements are in
+`scripts/check-doc-refs.mjs`), so the check does not lean on the build.
 
 Pages live in `docs-site/src/content/docs/` (English) and `.../ja/` (Japanese).
 **Both locales are updated together**; an untranslated Japanese page silently

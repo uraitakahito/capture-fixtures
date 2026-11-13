@@ -19,20 +19,23 @@ const ROOT = resolve(process.cwd(), "..");
 /**
  * The current text between `// #region <name>` and `// #endregion`.
  *
- * Throws when the region is gone — but whether that stops the build depends on
- * the page's extension, which is not obvious and was measured rather than
- * assumed (Starlight 0.41.4 / Astro 7.1.4):
+ * Throws when the region is gone — but whether that stops the build has
+ * depended on the page's extension and on the versions installed, which is not
+ * obvious and was measured rather than assumed:
  *
  *   .mdx — the throw surfaces through @astrojs/mdx's vite plugin and the
- *          build fails, exit 1.
- *   .md  — Starlight's docs loader catches it, logs
- *          `[ERROR] [starlight-docs-loader] Error rendering …`, and the build
- *          finishes with exit 0 and "Complete!".
+ *          build fails, exit 1 (Starlight 0.41.4 / Astro 7.1.4).
+ *   .md  — Starlight's docs loader logs
+ *          `[ERROR] [starlight-docs-loader] Error rendering …`. On Starlight
+ *          0.41.4 / Astro 7.1.4 the build then finished with exit 0 and
+ *          "Complete!"; on Starlight 0.41.11 / Astro 7.4.4 it exits 1
+ *          (measured 2026-11-13).
  *
- * Every page in capture-fixtures is .md, so here the build is not a guard at all. The
- * one that holds the line is scripts/check-doc-refs.mjs, which exits non-zero
- * for both kinds. `pnpm run site:check` runs both; the workflows run
- * `site:check`, never `site:build` alone.
+ * Every page in capture-fixtures is .md, so here the build is not a guard to rely
+ * on: it has let a missing region through on one pair of versions and stopped
+ * on another. The one that holds the line is scripts/check-doc-refs.mjs, which
+ * exits non-zero for both kinds. `pnpm run site:check` runs both; the workflows
+ * run `site:check`, never `site:build` alone.
  *
  * The name must run to the end of its line. `\b` is not enough: a word
  * boundary sits between `s` and `-`, so a region named `scenarios` would also

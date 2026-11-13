@@ -134,7 +134,7 @@ describe("static pages", () => {
 });
 
 describe("controllable responses", () => {
-  it("/slow waits the requested time then responds", async () => {
+  it("/slow-response waits the requested time then responds", async () => {
     const res = await app.inject("/slow-response?delayMs=5");
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("slept 5ms");
@@ -146,7 +146,7 @@ describe("controllable responses", () => {
     expect((await app.inject("/http-status/204")).statusCode).toBe(204);
   });
 
-  it("/server-redirect-chain/:n chains 302s down to /landed", async () => {
+  it("/server-redirect-chain/:hops chains 302s down to /redirect-target", async () => {
     const two = await app.inject("/server-redirect-chain/2");
     expect(two.statusCode).toBe(302);
     expect(two.headers.location).toBe("/server-redirect-chain/1");
@@ -156,7 +156,7 @@ describe("controllable responses", () => {
     expect(zero.headers.location).toBe("/redirect-target");
   });
 
-  it("/big returns a body of the requested size", async () => {
+  it("/large-body returns a body of the requested size", async () => {
     const res = await fetchOk(app, "/large-body?bytes=100");
     expect(res.rawPayload.length).toBe(100);
   });
@@ -260,7 +260,7 @@ describe("controllable responses", () => {
 });
 
 describe("stateful fails-then-succeeds", () => {
-  it("fails `fail` times then succeeds, per key", async () => {
+  it("fails `failTimes` times then succeeds, per key", async () => {
     const url = "/fails-then-succeeds?failTimes=2&key=t1";
     expect((await app.inject(url)).statusCode).toBe(503);
     expect((await app.inject(url)).statusCode).toBe(503);

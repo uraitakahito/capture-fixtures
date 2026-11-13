@@ -116,8 +116,9 @@ turns red.
 
 ### `/cookie-banner` — a fixed overlay
 
-Content with a `position: fixed` bar pinned to the bottom, carrying a cookie
-notice and an Accept button that removes it.
+Content under a `position: fixed` overlay that covers the whole viewport
+(`inset: 0`, `z-index: 9999`), carrying a cookie notice and an Accept button
+that removes it.
 
 Whatever a consumer does about overlays — remove them, ignore them, click
 through them — this is a page where one demonstrably exists, so the difference
@@ -152,7 +153,7 @@ did.
 
 ### `/cookie-and-storage` — state that outlives a page
 
-Sets `capture-fixtures=<tag>` as an HttpOnly cookie **and** writes the same tag to both
+Sets `fixture-state=<tag>` as an HttpOnly cookie **and** writes the same tag to both
 `localStorage` and `sessionStorage`. The page reports what *arrived* before
 overwriting it, so a consumer reads the previous capture's state rather than
 its own.
@@ -169,8 +170,9 @@ and it shows up as *content*, silently, not as an error.
 ### `/slow-response?delayMs=` — page-load timeouts
 
 Waits `delayMs` before sending anything. **Defaults to 35000**, deliberately more
-than BrowserHive's 30-second page-load timeout, so `scenarios.slowResponse()` with no
-argument is already a timeout.
+than BrowserHive's 30-second page-load timeout, so `/slow-response` with no
+`delayMs` is already a timeout. (`scenarios.slowResponse(delayMs)` always
+writes one.)
 
 Note where the delay is: before the *response*, not during it. The socket is
 open and nothing arrives — the case that hangs a naive fetch forever. For a
@@ -268,8 +270,8 @@ on.
 
 ### `/server-redirect-chain/:hops` — redirect chains
 
-A 302 chain of length `n`, ending at `/redirect-target`. `/redirect/3` is four hops:
-`3 → 2 → 1 → 0 → /redirect-target`.
+A 302 chain of `hops` + 1 redirects, ending at `/redirect-target`.
+`/server-redirect-chain/3` is four hops: `3 → 2 → 1 → 0 → /redirect-target`.
 
 Chain length is the parameter because redirect handling usually breaks at a
 limit rather than at one hop. Browsers cap chains around 20; a chain longer
@@ -331,9 +333,11 @@ the failed decode comes after the response has been recorded.
 
 `bytes` bytes trickled over roughly `overMs`, in ten chunks.
 
-Different failure from `/slow-response`: here the response **starts immediately** and
-then arrives slowly. Headers are in, the status is 200, and a timeout measured
-from request-start behaves differently from one measured between chunks. Code
+Different failure from `/slow-response`: here the response **starts** and then
+arrives slowly. The status (200) and the headers go out with the first chunk,
+`overMs` / 10 after the request, and the rest follows a chunk at a time, so a
+timeout measured from request-start behaves differently from one measured
+between chunks. Code
 that treats "response received" as "done" passes `/slow-response` and hangs on `/slow-body`.
 
 ### `/large-storage?bytes=` — caps on recorded storage values
@@ -366,7 +370,7 @@ concluding the cap did anything.
 ### `/fails-then-succeeds?failTimes=&key=` — deterministic retries
 
 Returns 503 for the first `failTimes` requests carrying `key`, then 200 for every
-request after. Defaults to `fail=2`, `key=default`.
+request after. Defaults to `failTimes=2`, `key=default`.
 
 **`key` is what makes retry tests trustworthy.** The failure counter is
 per-key, so two tests running at once do not consume each other's budget, and a
@@ -383,8 +387,9 @@ scenarios.failsThenSucceeds(1, "single-retry-then-success")
 
 ### `/assets/*` — static sub-resources
 
-Serves `site/` (`hero.svg`, `below.svg`). Referenced by `/lazy-images`, and available
-directly when a test needs a sub-resource whose bytes it can predict.
+Serves the files in `site/`. Referenced by `/lazy-images` and
+`/responsive-images`, and available directly when a test needs a sub-resource
+whose bytes it can predict.
 
 ## Following links
 
@@ -460,7 +465,7 @@ same observation — which is exactly the position a consumer is in.
 
 ### `/links/cycle/:side` — `a` ⇄ `b`
 
-Two pages linking to each other. `side` is `a` or `b`; anything else is a 404.
+Two pages linking to each other. `side` is `a` or `b`; anything else is a 400.
 
 A crawler without deduplication walks this until some *other* limit stops it, and
 then reports that limit as the reason it stopped. Nothing about the run looks
@@ -872,9 +877,10 @@ the model does not follow instructions found in the page's text.
 
 ## Introspection
 
-Three test-only endpoints. They exist because *how many times* something was
-requested, and with what, is often the actual assertion — a retry test that
-only checks the final status cannot tell one retry from five.
+Test-only endpoints. The request counts and the request log exist because
+*how many times* something was requested, and with what, is often the actual
+assertion — a retry test that only checks the final status cannot tell one
+retry from five.
 
 ### `GET /__request-counts`
 
