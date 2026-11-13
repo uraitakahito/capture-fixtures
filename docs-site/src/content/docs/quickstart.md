@@ -69,14 +69,6 @@ consumers expect.
 
 If you do need to, pass them the way you pass any environment variable.
 
-### Stopping
-
-The container handles SIGTERM and SIGINT: it stops accepting connections, lets
-the requests in flight finish, and exits 0, so `docker stop` and a compose stop
-return within a second. If closing takes longer than a few seconds it gives up
-and exits 1 instead. Without this, node as PID 1 would ignore the signal and be
-killed only when the grace period ran out.
-
 ```sh
 # container / docker
 container run -d --name capture-fixtures -e CAPTURE_FIXTURES_PORT=9090 capture-fixtures
@@ -100,6 +92,14 @@ pnpm run build && CAPTURE_FIXTURES_PORT=9090 pnpm start
 Fastify app and never touches the environment; `serve.ts` is the only reader.
 In-process tests use `app.inject()` and never listen at all, and if you do want
 a socket, pass what you want to `app.listen()` yourself.
+
+### Stopping
+
+The container handles SIGTERM and SIGINT: it stops accepting connections, lets
+the requests in flight finish, and exits 0, so `docker stop` and a compose stop
+return within a second. If closing takes longer than a few seconds it gives up
+and exits 1 instead. Without this, node as PID 1 would ignore the signal and be
+killed only when the grace period ran out.
 
 ## Waiting for it
 

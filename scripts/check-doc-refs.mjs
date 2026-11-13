@@ -3,12 +3,15 @@
  *
  * This script is the whole guard here, not a supplement to one. The extractor
  * in docs-site/src/lib/extract.ts does throw on a missing `// #region`, but
- * whether that stops the build depends on the page's extension: on .mdx the
- * throw surfaces through vite and the build fails; on .md — which is every
- * page in capture-fixtures — Starlight's docs loader catches it, logs
- * `[ERROR] [starlight-docs-loader] Error rendering …`, and finishes with
- * exit 0. So `astro build` alone goes green over a doc pointing at code that
- * no longer exists. Measured, not assumed.
+ * whether that stops the build has depended on the page's extension and on the
+ * versions installed: on .mdx the throw surfaces through vite and the build
+ * fails; on .md — which is every page in capture-fixtures — Starlight's docs
+ * loader logs `[ERROR] [starlight-docs-loader] Error rendering …`, and on
+ * Starlight 0.41.4 / Astro 7.1.4 it then finished with exit 0, so `astro
+ * build` alone went green over a doc pointing at code that no longer exists.
+ * On Starlight 0.41.11 / Astro 7.4.4 the same build exits 1 (measured
+ * 2026-11-13). Measured both times, not assumed — and a guard that comes and
+ * goes with a dependency's version is not one to lean on.
  *
  * What is checked here:
  *

@@ -55,10 +55,12 @@ jobs:
         run: npm ci --prefix docs-site
 
       # site:check rather than site:build: on .md pages — which is all of them
-      # here — `astro build` goes green over a doc whose `// #region` snippet
-      # failed to inject, because Starlight's loader catches the extractor's
-      # throw and still exits 0. Without the check, that page publishes. The
-      # check costs seconds.
+      # here — whether `astro build` stops on a doc whose `// #region` snippet
+      # failed to inject has depended on the Astro and Starlight versions
+      # (docs-site/src/lib/extract.ts has the measurements): Starlight's loader
+      # catches the extractor's throw, and on some versions the build still
+      # exits 0. Without the check, that page could publish. The check costs
+      # seconds.
       - name: Build and verify
         run: pnpm run site:check
 

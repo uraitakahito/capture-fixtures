@@ -13,11 +13,12 @@ import { scenarios } from "../src/scenarios.js";
  * here — in a plain unit test — instead of in a suite that needs containers and
  * a browser.
  *
- * Recorded 2026-09-08 from:
+ * Recorded 2026-09-08 from (file names as of BrowserHive v29.1.0 — some calls
+ * have moved to other suites since their values were recorded):
  *   browserhive/test/e2e/truncation.e2e.test.ts  largeBody(capBytes + 1 MiB), capBytes ≤ 1 MiB
- *   browserhive/test/e2e/behaviors.e2e.test.ts   blockMainThread(6000, 20_000)
+ *   browserhive/test/e2e/pacing-hold.e2e.test.ts blockMainThread(6000, 20_000)
  *   browserhive/test/e2e/session.e2e.test.ts     cookieAndStorage(mark)
- *   browserhive/test/e2e/retry.e2e.test.ts       failsThenSucceeds(2, "e2e")
+ *   browserhive/test/e2e/scenarios.e2e.test.ts   failsThenSucceeds(2, "e2e")
  *   browserhive/test/e2e/session.e2e.test.ts     largeStorage(3 MiB)   ← see below
  *   browserhive/test/e2e/settle.e2e.test.ts      fetchLate(0, 5000), fetchLate(0, 500), ticker(),
  *                                                ticker(250, 1500), blockMainThread(100, 1200)   ← see below
@@ -29,15 +30,15 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive/test/e2e/stop-under-load.e2e.test.ts  fetchStorm(5_000_000, 40, 3)   ← see below
  *   browserhive/test/e2e/warc-rollover.e2e.test.ts  warcRollover(8, 250_000)   ← see below
  *   browserhive/test/e2e/snapshots.e2e.test.ts   markedSearch, markedSearchResult, markedSearchAnswer   ← see below
- *   browserhive's e2e for a page's own console (CAPTURE-18, not written yet)
+ *   browserhive/test/e2e/page-console.e2e.test.ts  (CAPTURE-18)
  *                                                markedConsole("writes" | "silent", …, { embedOrigin }),
  *                                                markedConsoleFrame, markedConsoleWorker   ← see below
- *   browserhive's e2e for a secret kept out of an archive (CAPTURE-166, not written yet)
+ *   browserhive/test/e2e/script-values.e2e.test.ts  (CAPTURE-166)
  *                                                loginForm, loginAfter, LOGIN_SUBMIT, echoText, echoJson,
  *                                                echoBytes, echoRedirect   ← see below
  *
- * The last row is the exception to "actually passes": `/large-storage` and the
- * consumer's storage cap were written together, so the caller lands after this
+ * The `largeStorage` row is the exception to "actually passes": `/large-storage`
+ * and the consumer's storage cap were written together, so the caller lands after this
  * release. It is recorded now because the argument is what set
  * `MAX_STORAGE_BYTES` — leaving it out would let a later tightening pass here
  * and break the caller it was sized for.

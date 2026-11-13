@@ -61,12 +61,11 @@ const CACHEABLE_ETAG = '"fixture-cacheable-v1"';
 
 const REDIRECT_TARGET_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>landed</title></head><body><h1>landed</h1></body></html>`;
 
-// Client-side navigation on DOMContentLoaded. BrowserHive's runOnStableContext
-// must survive the "Execution context was destroyed" this triggers.
+// Client-side navigation by an inline script, as the page is parsed.
+// BrowserHive's runOnStableContext must survive the "Execution context was
+// destroyed" this triggers.
 const CLIENT_SIDE_REDIRECT_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>redirecting</title></head><body><script>location.replace("/redirect-target")</script></body></html>`;
 
-// Below-the-fold lazy image + IntersectionObserver-swapped data-src. Only a
-// browser that scrolls (autoScroll) will request /assets/hero.svg and /assets/below.svg.
 /**
  * A page with no bottom.
  *
@@ -107,6 +106,8 @@ grow();
 </script>
 </body></html>`;
 
+// Below-the-fold lazy image + IntersectionObserver-swapped data-src. Only a
+// browser that scrolls (autoScroll) will request /assets/hero.svg and /assets/below.svg.
 const LAZY_IMAGES_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>lazy</title></head><body>
 <h1>top</h1>
 <div style="height:3000px">scroll down</div>
@@ -921,7 +922,7 @@ const CHANGING_PAGES = {
  * callbacks cannot fire and `page.evaluate` cannot even start.
  *
  * This is the only way an origin can make a capture's per-operation budget
- * expire. A slow *response* (`/slow`) delays the navigation; it does not stop
+ * expire. A slow *response* (`/slow-response`) delays the navigation; it does not stop
  * the page from working once it has loaded.
  *
  * The holding starts from a `setTimeout`, not during parsing. Blocking the
@@ -1153,12 +1154,6 @@ async function* slowBody(bytes: number, overMs: number): AsyncGenerator<Buffer> 
 }
 
 /**
- * Build the fixture-origin Fastify app.
- *
- * Same core in two shapes: import it for in-process tests (via `app.inject`)
- * or run it in a container (`serve.ts`) so a worker's Chrome reaches it by IP.
- */
-/**
  * One request as it arrived, for `/__requests`.
  *
  * A bounded set of headers, not all of them. Recording everything makes the
@@ -1293,6 +1288,12 @@ ${images}
 </body></html>`;
 };
 
+/**
+ * Build the fixture-origin Fastify app.
+ *
+ * Same core in two shapes: import it for in-process tests (via `app.inject`)
+ * or run it in a container (`serve.ts`) so a worker's Chrome reaches it by IP.
+ */
 export function buildFixture(): FastifyInstance {
   const app = Fastify();
 
@@ -1379,7 +1380,7 @@ export function buildFixture(): FastifyInstance {
     );
   });
 
-  // Static assets (referenced by /lazy and available as /assets/*).
+  // Static assets (referenced by /lazy-images and /responsive-images, and available as /assets/*).
   void app.register(fastifyStatic, {
     root: join(import.meta.dirname, "..", "site"),
     prefix: "/assets/",
@@ -1592,7 +1593,7 @@ export function buildFixture(): FastifyInstance {
     "/links/cycle/:side",
     {
       // Not `numbers()` — the knob is a name, not a count. Anything but the two
-      // sides is a 404 rather than a page linking somewhere that does not exist.
+      // sides is a 400 rather than a page linking somewhere that does not exist.
       schema: { params: { type: "object", properties: { side: { type: "string", enum: ["a", "b"] } }, required: ["side"] } },
     },
     (request, reply) => {
