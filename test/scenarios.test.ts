@@ -61,6 +61,7 @@ describe("scenarios URL contract", () => {
     expect(scenarios.randomBusy(2_000_000)).toBe("/random/busy?n=2000000");
     expect(scenarios.randomImage(0)).toBe("/random/img/0.svg");
     expect(scenarios.randomImage(999_999)).toBe("/random/img/999999.svg");
+    expect(scenarios.viewportImage("height-tall-2x")).toBe("/viewport/img/height-tall-2x.svg");
   });
 
   it("url-encodes counter keys so parallel tests stay isolated", () => {
@@ -73,12 +74,13 @@ describe("scenarios URL contract", () => {
  * Every path the contract names must be served by the running fixture.
  *
  * `scenarios` is a cross-repo contract — BrowserHive imports it as a workspace
- * dependency — and its type is `string`, so renaming a route in `fixture.ts`
- * without updating `scenarios.ts` compiles cleanly. It breaks in another repo's
- * E2E suite, as a 404, much later.
+ * dependency — and its entries are plain strings or builders that return one, so
+ * renaming a route in `fixture.ts` without updating `scenarios.ts` compiles
+ * cleanly. It breaks in another repo's E2E suite, as a 404, much later.
  *
- * Only the status is asserted here. What each page contains is `fixture.test.ts`
- * work; this suite answers one question: does a route exist for every entry?
+ * Only statuses and the count of entries are asserted here: every entry is
+ * listed, none is a 404, and the random and viewport pages answer exactly 200.
+ * What each page contains is `fixture.test.ts` work.
  */
 describe("every scenario reaches the fixture", () => {
   let app: ReturnType<typeof buildFixture>;
@@ -145,6 +147,7 @@ describe("every scenario reaches the fixture", () => {
     ["randomFrameOther", scenarios.randomFrameOther("http://capture-fixtures-1-b.browserhive:8080")],
     ["randomBusy", scenarios.randomBusy(3)],
     ["randomImage", scenarios.randomImage(42)],
+    ["viewportImage", scenarios.viewportImage("width-l-1x")],
     ["asset", scenarios.asset("hero.svg")],
   ];
 
@@ -161,9 +164,9 @@ describe("every scenario reaches the fixture", () => {
     expect(res.statusCode, `${name} → ${path}`).not.toBe(404);
   });
 
-  // No 302 or 503 among the random pages, so they can be held to 200: a page
+  // No 302 or 503 among the random and viewport pages, so they can be held to 200: a page
   // that answers 400 to its own builder's path would pass the check above.
-  it.each([...STATIC, ...BUILT].filter(([name]) => name.startsWith("random")))(
+  it.each([...STATIC, ...BUILT].filter(([name]) => name.startsWith("random") || name.startsWith("viewport")))(
     "%s は 200 で答える",
     async (name, path) => {
       expect((await app.inject(path)).statusCode, `${name} → ${path}`).toBe(200);

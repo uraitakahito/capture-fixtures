@@ -867,6 +867,38 @@ note はサーバのプロセスの中に session ごとに置かれ、`POST /__
 答えるのはページが書く綴りだけです。`0`、または頭に 0 の無い数字で、1,000,000 より小さいもの。
 それ以外は 404 で返します（存在しない絵への答え）。だから要求ログに、同じ絵が 2 通りの綴りで載ることはありません。
 
+## 窓で絵の版を選ぶページ
+
+撮った時の窓に頁を戻して再生する replay viewer のためのページです（capture-player。CAPTURE-422）。
+撮った物に入るのは、撮ったブラウザがその窓で求めた絵の版だけです。BrowserHive の窓は 1280 × 800・DPR（device pixel ratio。CSS の 1px を何画素で描くか）1 です。
+別の窓で開いた再生は別の版を求め、その版は記録にありません。
+ここの絵はどれも自分の名前を描いた SVG（`/viewport/img/<名前>.svg`）なので、読み込みがどの版を求めたかは `/__request-counts` でわかります（`src/viewport.ts`）。
+
+どのページも 1 つだけを変えています。帯は apple.com/jp と同じです。
+
+| ページ | 絵を選ぶもの | 求める名前 |
+|---|---|---|
+| `/viewport/picture-width` | 幅で分けた `<picture>` の source（734・1068・1440 px まで、それより広い）、それぞれ `1x` と `2x`。選ぶのはブラウザ | `width-{s,m,l,xl}-{1x,2x}` |
+| `/viewport/picture-height` | 高さ 776 px 以上の窓の source と `<img>`、それぞれ `1x` と `2x`。選ぶのはブラウザ | `height-{tall,short}-{1x,2x}` |
+| `/viewport/js-dpr` | `/viewport/js-dpr.js` が `devicePixelRatio` を 1 度読む。1.5 以上なら `js-2x` | `js-{1x,2x}` |
+| `/viewport/js-height` | `/viewport/js-height.js` が `matchMedia("(min-height: 776px)")` を 1 度問う | `jsheight-{tall,short}` |
+| `/viewport/image-set` | 1 つの箱に CSS の `image-set()`、もう 1 つに `@media (min-resolution: 2dppx)`。選ぶのはブラウザ | `set-{1x,2x}`、`res-{1x,2x}` |
+
+BrowserHive の窓では、`width-l-1x`・`height-tall-1x`・`js-1x`・`jsheight-tall`・`set-1x`・`res-1x` を求めます。
+どの窓でどの名前を求めるかは、`viewportImages(window)`（export しています）でわかります。
+2 種類をわざと分けています。ブラウザが選ぶ物は、窓の本当の DPR と大きさに従い、窓が替わると選び直されることがあります。
+ページのスクリプトが選ぶ物は、スクリプトが走る時に 1 度だけ読むので、後から替わりません。
+
+`/viewport/` の下はどれも `no-store` で送り、ページは状態を持ちません。
+
+### `/viewport/` ― クロール用の、全部へのリンク
+
+上の 5 ページへのリンクです。ここから深さ 1 でクロールすると 6 ページに届きます。
+
+### `/viewport/img/:name.svg` ― 版の絵
+
+名前を字で描いた 320 × 80 の絵です。ここのページが求める名前にだけ答え、ほかは存在しない絵として 404 にします。
+
 ## イントロスペクション
 
 テスト専用のエンドポイントです。

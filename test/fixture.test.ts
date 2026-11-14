@@ -25,6 +25,7 @@ import {
   type MarkedWindowWay,
 } from "../src/marked.js";
 import { scenarios } from "../src/scenarios.js";
+import { VIEWPORT_FILES, VIEWPORT_IMAGE_NAMES, viewportImages, type ViewportWindow } from "../src/viewport.js";
 import { fetchOk } from "./helpers.js";
 
 let app: ReturnType<typeof buildFixture>;
@@ -2004,5 +2005,141 @@ describe("warc rollover pages", () => {
     await fetchOk(app, "/warc/noise?seed=0", 400);
     await fetchOk(app, "/warc/rollover?resources=65", 400);
     await fetchOk(app, "/warc/rollover?bytes=0", 400);
+  });
+});
+
+describe("窓と DPR で絵の版を選ぶページ（CAPTURE-422）", () => {
+  /** The windows the checks below open: the capture's, both sides of every band, and Retina. */
+  const WINDOWS: ViewportWindow[] = [
+    { width: 1280, height: 800, dpr: 1 },
+    { width: 1280, height: 800, dpr: 2 },
+    { width: 390, height: 844, dpr: 2 },
+    { width: 734, height: 775, dpr: 1 },
+    { width: 735, height: 776, dpr: 1 },
+    { width: 1068, height: 711, dpr: 1 },
+    { width: 1069, height: 893, dpr: 2 },
+    { width: 1440, height: 900, dpr: 1 },
+    { width: 1441, height: 900, dpr: 2 },
+    { width: 2560, height: 1440, dpr: 1 },
+  ];
+  const label = (w: ViewportWindow): string => `${String(w.width)}×${String(w.height)}@${String(w.dpr)}`;
+
+  // The numbers are written here, not taken from src/viewport.ts: moving a band
+  // edge there must turn this red, not move the expectation with it.
+  it("帯の境で求める名前が替わる（幅 734・1068・1440、高さ 776、JS の DPR 1.5）", () => {
+    const at = (width: number, height: number, dpr: number) => viewportImages({ width, height, dpr });
+    expect(at(734, 800, 1)["/viewport/picture-width"]).toEqual(["width-s-1x"]);
+    expect(at(735, 800, 1)["/viewport/picture-width"]).toEqual(["width-m-1x"]);
+    expect(at(1068, 800, 1)["/viewport/picture-width"]).toEqual(["width-m-1x"]);
+    expect(at(1069, 800, 1)["/viewport/picture-width"]).toEqual(["width-l-1x"]);
+    expect(at(1440, 800, 2)["/viewport/picture-width"]).toEqual(["width-l-2x"]);
+    expect(at(1441, 800, 1)["/viewport/picture-width"]).toEqual(["width-xl-1x"]);
+    expect(at(1280, 775, 1)["/viewport/picture-height"]).toEqual(["height-short-1x"]);
+    expect(at(1280, 776, 2)["/viewport/picture-height"]).toEqual(["height-tall-2x"]);
+    expect(at(1280, 775, 1)["/viewport/js-height"]).toEqual(["jsheight-short"]);
+    expect(at(1280, 776, 1)["/viewport/js-height"]).toEqual(["jsheight-tall"]);
+    expect(at(1280, 800, 1.49)["/viewport/js-dpr"]).toEqual(["js-1x"]);
+    expect(at(1280, 800, 1.5)["/viewport/js-dpr"]).toEqual(["js-2x"]);
+    expect(at(1280, 800, 2)["/viewport/image-set"]).toEqual(["set-2x", "res-2x"]);
+  });
+
+  it("BrowserHive の窓（1280×800・DPR 1）が求める名前", () => {
+    expect(viewportImages({ width: 1280, height: 800, dpr: 1 })).toEqual({
+      "/viewport/picture-width": ["width-l-1x"],
+      "/viewport/picture-height": ["height-tall-1x"],
+      "/viewport/js-dpr": ["js-1x"],
+      "/viewport/js-height": ["jsheight-tall"],
+      "/viewport/image-set": ["set-1x", "res-1x"],
+    });
+  });
+
+  /** The image name in a `/viewport/img/<name>.svg` URL. */
+  const nameOf = (url: string): string => /\/viewport\/img\/([a-z0-9-]+)\.svg/.exec(url)?.[1] ?? `?${url}`;
+  /** 1x or 2x of a `srcset` written as `<1x>, <2x> 2x`, the way a browser picks at DPR 1 and 2. */
+  const pickSrcset = (srcset: string, dpr: number): string => {
+    const [one, two] = srcset.split(",").map((c) => c.trim().split(/\s+/)[0]!);
+    return nameOf(dpr > 1 ? two! : one!);
+  };
+  /** The two media features the pages write, evaluated for `w`. */
+  const mediaMatches = (media: string, w: ViewportWindow): boolean => {
+    const max = /\(max-width: (\d+)px\)/.exec(media);
+    if (max) return w.width <= Number(max[1]);
+    const min = /\(min-height: (\d+)px\)/.exec(media);
+    if (min) return w.height >= Number(min[1]);
+    throw new Error(`unknown media ${media}`);
+  };
+  /** What a browser picks from a `<picture>`: the first `<source>` whose media matches, else the `<img>`. */
+  const pickPicture = (html: string, w: ViewportWindow): string => {
+    for (const m of html.matchAll(/<source media="([^"]+)" srcset="([^"]+)">/g)) {
+      if (mediaMatches(m[1]!, w)) return pickSrcset(m[2]!, w.dpr);
+    }
+    return pickSrcset(/<img id="pick"[^>]* srcset="([^"]+)"/.exec(html)![1]!, w.dpr);
+  };
+
+  it.each(WINDOWS.map((w) => [label(w), w] as const))("%s: <picture> の 2 頁の source が表どおりに書かれている", async (_l, w) => {
+    for (const path of ["/viewport/picture-width", "/viewport/picture-height"]) {
+      const html = (await fetchOk(app, path)).body;
+      expect([pickPicture(html, w)], path).toEqual(viewportImages(w)[path]);
+    }
+  });
+
+  it.each(WINDOWS.map((w) => [label(w), w] as const))("%s: image-set と min-resolution が表どおりに書かれている", async (_l, w) => {
+    const html = (await fetchOk(app, "/viewport/image-set")).body;
+    const set = /image-set\(url\("([^"]+)"\) 1x, url\("([^"]+)"\) 2x\)/.exec(html)!;
+    const resBase = /#res \{ background-image: url\("([^"]+)"\); \}/.exec(html)!;
+    const res2 = /@media \(min-resolution: 2dppx\) \{ #res \{ background-image: url\("([^"]+)"\); \} \}/.exec(html)!;
+    const picked = [nameOf(w.dpr > 1 ? set[2]! : set[1]!), nameOf(w.dpr >= 2 ? res2[1]! : resBase[1]!)];
+    expect(picked).toEqual(viewportImages(w)["/viewport/image-set"]);
+  });
+
+  /** Runs a page's one script against a fake window `w`, and returns the image it appended and the title. */
+  const runScript = (source: string, w: ViewportWindow) => {
+    const made: { id?: string; src?: string }[] = [];
+    const document = { title: "", body: { appendChild: (el: { id?: string; src?: string }) => made.push(el) }, createElement: () => ({}) };
+    const window = { devicePixelRatio: w.dpr, matchMedia: (q: string) => ({ matches: mediaMatches(q, w) }) };
+    runInContext(source, createContext({ document, window }));
+    return { made, title: document.title };
+  };
+
+  it.each(WINDOWS.map((w) => [label(w), w] as const))("%s: JS の 2 頁は、読んだ値の名前の絵を 1 枚だけ求める", async (_l, w) => {
+    for (const [path, script] of [["/viewport/js-dpr", "/viewport/js-dpr.js"], ["/viewport/js-height", "/viewport/js-height.js"]] as const) {
+      expect((await fetchOk(app, path)).body).toContain(`<script src="${script}"></script>`);
+      const res = await fetchOk(app, script);
+      expect(res.headers["content-type"]).toContain("javascript");
+      const { made, title } = runScript(res.body, w);
+      const [want] = viewportImages(w)[path]!;
+      expect(made.map((m) => m.src), path).toEqual([scenarios.viewportImage(want!)]);
+      expect(title).toBe(want);
+    }
+  });
+
+  it("目次は 5 頁へのリンクを持ち、どの頁も no-store で答える", async () => {
+    const index = (await fetchOk(app, scenarios.viewportIndex)).body;
+    const links = [...index.matchAll(/<a href="([^"]+)">/g)].map((m) => m[1]);
+    expect(links).toEqual([
+      scenarios.viewportPictureWidth,
+      scenarios.viewportPictureHeight,
+      scenarios.viewportJsDpr,
+      scenarios.viewportJsHeight,
+      scenarios.viewportImageSet,
+    ]);
+    for (const path of Object.keys(VIEWPORT_FILES)) {
+      const res = await fetchOk(app, path);
+      expect(res.headers["cache-control"], path).toBe("no-store");
+    }
+  });
+
+  it("絵は名前を描いた SVG で、頁が求めない名前は 404", async () => {
+    for (const name of VIEWPORT_IMAGE_NAMES) {
+      const res = await fetchOk(app, scenarios.viewportImage(name));
+      expect(res.headers["content-type"]).toContain("image/svg+xml");
+      expect(res.body).toContain(`>${name}</text>`);
+    }
+    for (const bad of ["width-l-3x", "WIDTH-l-1x", "js-1x.svg.svg", "..%2Fjs-1x"]) {
+      expect((await app.inject(scenarios.viewportImage(bad))).statusCode, bad).toBe(404);
+    }
+    // Every name a page can ask for, in some window, is one the route answers.
+    const asked = new Set(WINDOWS.flatMap((w) => Object.values(viewportImages(w)).flat()));
+    for (const name of asked) expect(VIEWPORT_IMAGE_NAMES, name).toContain(name);
   });
 });

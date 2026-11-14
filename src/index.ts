@@ -32,3 +32,12 @@ export {
   type MarkedTokens,
   type MarkedWindowWay,
 } from "./marked.js";
+export {
+  SCRIPT_RETINA_MIN_DPR,
+  TALL_MIN_HEIGHT,
+  VIEWPORT_IMAGE_NAMES,
+  WIDEST_BAND,
+  WIDTH_BANDS,
+  viewportImages,
+  type ViewportWindow,
+} from "./viewport.js";

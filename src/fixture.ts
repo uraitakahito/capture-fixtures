@@ -37,6 +37,7 @@ import {
   randomFrameOtherHtml,
   randomImageSvg,
 } from "./random.js";
+import { VIEWPORT_FILES, VIEWPORT_IMAGE_NAMES, viewportImageSvg } from "./viewport.js";
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
@@ -2091,6 +2092,24 @@ export function buildFixture(): FastifyInstance {
       return reply.type("text/html").send(CHANGING_PAGES[kind](n));
     },
   );
+
+  // Pages whose images depend on the window's width, height and DPR (src/viewport.ts).
+  // `no-store`, like the random pages: every load asks again, and the request log
+  // shows which variants that load picked.
+  for (const [path, { type, body }] of Object.entries(VIEWPORT_FILES)) {
+    app.get(path, (_request, reply) => reply.header("cache-control", "no-store").type(type).send(body));
+  }
+
+  // Only the names a page here can ask for; any other is a 404, as for an image
+  // that does not exist.
+  app.get<{ Params: { file: string } }>("/viewport/img/:file", (request, reply) => {
+    const name = /^([a-z0-9-]+)\.svg$/.exec(request.params.file)?.[1];
+    if (name === undefined || !VIEWPORT_IMAGE_NAMES.includes(name)) {
+      reply.callNotFound();
+      return reply;
+    }
+    return reply.header("cache-control", "no-store").type("image/svg+xml").send(viewportImageSvg(name));
+  });
 
   // Pages that pick an image by a random draw (src/random.ts). Nothing here keeps
   // state: what a page picked is in the request log, not in the server. All of
