@@ -585,6 +585,27 @@ export const scenarios = {
   /** The image a random page appends for `n`: the number as text. Any other spelling is a 404. */
   randomImage: (n: number): string => `/random/img/${String(n)}.svg`,
 
+  /**
+   * Links to every viewport page below (CAPTURE-422). Each asks for images that
+   * depend on the window — its width, its height or its device pixel ratio — and
+   * every image draws its own name, so the request log says which variant a load
+   * picked. `viewportImages` in `src/viewport.ts` says which names a window asks
+   * for. A crawl of depth 1 from here reaches 6 pages.
+   */
+  viewportIndex: "/viewport/",
+  /** A `<picture>` with a source per width band (734 / 1068 / 1440 px), each with a 1x and a 2x image: the browser picks. */
+  viewportPictureWidth: "/viewport/picture-width",
+  /** A `<picture>` with a source for a window at least 776 px tall, 1x and 2x: the browser picks. */
+  viewportPictureHeight: "/viewport/picture-height",
+  /** Page script reads `devicePixelRatio` once and asks for `js-2x` at 1.5 or more, else `js-1x`. */
+  viewportJsDpr: "/viewport/js-dpr",
+  /** Page script asks `matchMedia("(min-height: 776px)")` once and asks for `jsheight-tall` or `jsheight-short`. */
+  viewportJsHeight: "/viewport/js-height",
+  /** CSS `image-set()` (1x / 2x) on one box and `@media (min-resolution: 2dppx)` on another: the browser picks. */
+  viewportImageSet: "/viewport/image-set",
+  /** An image a viewport page asks for, by name (e.g. `width-l-1x`). A name no page asks for is a 404. */
+  viewportImage: (name: string): string => `/viewport/img/${name}.svg`,
+
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */
   asset: (path: string): string => `/assets/${path}`,
 } as const;

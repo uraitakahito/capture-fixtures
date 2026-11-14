@@ -975,6 +975,46 @@ the pages write is answered — `0`, or digits with no leading zero, below
 1,000,000. Anything else is a 404, the answer for an image that does not exist,
 so a request log never holds two spellings of one pick.
 
+## Pages that pick an image by the window
+
+For a replay viewer that puts a page back into the window it was captured in
+(capture-player, CAPTURE-422). A capture records only the image variants the
+capturing browser asked for, in its window — BrowserHive's is 1280 × 800 at a
+device pixel ratio (DPR, how many device pixels draw one CSS pixel) of 1. A
+replay opened in another window asks for other variants, and those are not in
+the archive. Every image here is an SVG that draws its own name
+(`/viewport/img/<name>.svg`), so `/__request-counts` says which variant a load
+asked for (`src/viewport.ts`).
+
+Each page varies one thing. The bands are the ones apple.com/jp uses, so a
+replay that gets these right gets that page right.
+
+| Page | What picks the image | Names it asks for |
+|---|---|---|
+| `/viewport/picture-width` | `<picture>` sources by width — up to 734, 1068 and 1440 px, then wider — each `1x` and `2x`: the browser picks | `width-{s,m,l,xl}-{1x,2x}` |
+| `/viewport/picture-height` | a `<picture>` source for a window at least 776 px tall, `1x` and `2x`: the browser picks | `height-{tall,short}-{1x,2x}` |
+| `/viewport/js-dpr` | `/viewport/js-dpr.js` reads `devicePixelRatio` once: `js-2x` at 1.5 or more | `js-{1x,2x}` |
+| `/viewport/js-height` | `/viewport/js-height.js` asks `matchMedia("(min-height: 776px)")` once | `jsheight-{tall,short}` |
+| `/viewport/image-set` | CSS `image-set()` on one box, `@media (min-resolution: 2dppx)` on another: the browser picks | `set-{1x,2x}`, `res-{1x,2x}` |
+
+In BrowserHive's window the pages ask for `width-l-1x`, `height-tall-1x`,
+`js-1x`, `jsheight-tall`, `set-1x` and `res-1x`. `viewportImages(window)`
+(exported) gives the names for any window. Two kinds are told apart on purpose:
+what the browser picks follows the window's real DPR and size, and can change
+when the window changes; what page script picks is read once, as the script
+runs, and does not.
+
+Everything under `/viewport/` is sent `no-store`, and the pages keep no state.
+
+### `/viewport/` — every page, for a crawl
+
+Links to the five pages above. A crawl of depth 1 from here reaches 6 pages.
+
+### `/viewport/img/:name.svg` — a variant
+
+The name as text, 320 × 80. Only names a page here asks for are answered; any
+other is a 404, the answer for an image that does not exist.
+
 ## Introspection
 
 Test-only endpoints. The request counts and the request log exist because

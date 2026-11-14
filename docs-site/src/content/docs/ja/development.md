@@ -11,7 +11,7 @@ pnpm run build   # dist/ を出力
 pnpm start       # dist/serve.js を実行
 ```
 
-CI が回すのは `pnpm run check` です。
+CI（`ci.yaml`）は `pnpm run check` の段を 1 つずつ回し（`audit` だけは別の workflow `audit.yml` で、プルリクエスト・push・毎日に回す）、最後に `build` を回します。
 `build` が別なのは、利用側が `dist/` から import するからです（後述）。
 
 ## 利用側からの使われ方
@@ -32,7 +32,7 @@ submodule はソースがビルドされないままチェックアウトされ�
 
 4 か所を、この順に。
 
-1. **`src/fixture.ts`** ― ルート本体
+1. **`src/fixture.ts`** ― ルート本体。自分の本文を持つページの一揃いは、隣のモジュール（`src/random.ts`・`src/viewport.ts`）に本文を置き、`fixture.ts` が配る
 2. **`src/scenarios.ts`** ― 型付きのエントリ。`// #region scenarios` マーカーの内側に。
    利用側にパスを直書きさせてはいけません
 3. **`test/scenarios.test.ts`** ― 引数を取るエントリ（関数）は、代表の引数を付けて `BUILT` の一覧に。
