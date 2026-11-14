@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { runInNewContext } from "node:vm";
+import { createContext, runInContext, runInNewContext } from "node:vm";
 import { gunzipSync, gzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -325,6 +325,329 @@ describe("読むたびに変わるページ（CAPTURE-167）", () => {
 
   it("知らない種類は 400", async () => {
     expect((await app.inject("/changing/nope?key=x")).statusCode).toBe(400);
+  });
+});
+
+describe("乱数で絵を選ぶページ（CAPTURE-378）", () => {
+  /** An element a picker made, with the fields a picker sets. */
+  interface Made {
+    id?: string;
+    src?: string;
+    alt?: string;
+    width?: number;
+    height?: number;
+  }
+
+  /**
+   * Runs `sources` in order in one context of fakes, as one page's scripts, and
+   * returns what they appended and the title they left. The random sources are
+   * whatever `fakes` says: a picker that stopped drawing from them would pick
+   * the same number whatever the fake returns, and the assertions below would
+   * go red.
+   */
+  const run = (sources: readonly string[], fakes: Record<string, unknown> = {}): { made: Made[]; title: string } => {
+    const made: Made[] = [];
+    const document = {
+      title: "",
+      body: { appendChild: (el: Made) => made.push(el) },
+      createElement: (): Made => ({}),
+    };
+    const context = createContext({ document, ...fakes });
+    for (const source of sources) runInContext(source, context);
+    return { made, title: document.title };
+  };
+
+  /** `Math` whose `random` is `random`, the rest the real one. */
+  const mathWith = (random: () => number): Math => Object.create(Math, { random: { value: random } }) as Math;
+
+  /** Draw k returns k/64 (1-based) — exact in binary, so `* 1e6` lands on a whole number. Counts the draws. */
+  const sequence = (): { math: Math; draws: () => number } => {
+    let draws = 0;
+    return {
+      math: mathWith(() => {
+        draws += 1;
+        return draws / 64;
+      }),
+      draws: () => draws,
+    };
+  };
+
+  /** The `src` of each `<script src>` in `html`, in order. */
+  const scriptSources = (html: string): string[] => [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]!);
+
+  /** The page's scripts, fetched in the order the page loads them. */
+  const scriptsOf = async (path: string): Promise<string[]> => {
+    const sources = scriptSources((await fetchOk(app, path)).body);
+    return Promise.all(
+      sources.map(async (src) => {
+        const res = await fetchOk(app, src);
+        expect(res.headers["content-type"], src).toContain("javascript");
+        return res.body;
+      }),
+    );
+  };
+
+  /** The one inline script of `html`. */
+  const inlineScript = (html: string): string => /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
+
+  /** Asserts the picker appended exactly one image, for `n`, and named the page after it. */
+  const expectPicked = (result: { made: Made[]; title: string }, n: number): void => {
+    expect(result.made).toEqual([{ id: "pick", src: scenarios.randomImage(n), alt: `pick ${String(n)}`, width: 320, height: 80 }]);
+    expect(result.title).toBe(`pick ${String(n)}`);
+  };
+
+  const PAGES: [string, string, string[]][] = [
+    ["pick", scenarios.randomPick, ["/random/pick.js"]],
+    ["uuid", scenarios.randomUuid, ["/random/uuid.js"]],
+    ["bytes", scenarios.randomBytes, ["/random/bytes.js"]],
+    ["late", scenarios.randomLate, ["/random/late.js"]],
+    ["two-scripts", scenarios.randomTwoScripts, ["/random/noise.js", "/random/pick.js"]],
+    ["racy", scenarios.randomRacy, ["/random/racy.js"]],
+    ["helper", scenarios.randomHelper, ["/random/helper.js"]],
+    ["time", scenarios.randomTime, ["/random/time.js"]],
+    ["worker", scenarios.randomWorker, ["/random/worker.js"]],
+    ["busy", scenarios.randomBusy(3), ["/random/busy.js?n=3"]],
+  ];
+
+  it.each(PAGES)("%s は UTF-8 の HTML で、自分の script を順に読む", async (_name, path, scripts) => {
+    const res = await fetchOk(app, path);
+    expect(res.headers["content-type"]).toContain("text/html");
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.body).toContain('<meta charset="utf-8">');
+    expect(scriptSources(res.body)).toEqual(scripts);
+    for (const src of scripts) {
+      const js = await fetchOk(app, src);
+      expect(js.headers["content-type"], src).toContain("text/javascript");
+      expect(js.headers["cache-control"], src).toBe("no-store");
+    }
+  });
+
+  it("worker-pick.js は JavaScript で配る", async () => {
+    const res = await fetchOk(app, "/random/worker-pick.js");
+    expect(res.headers["content-type"]).toContain("text/javascript");
+  });
+
+  it("inline と probe は script を外から読まない", async () => {
+    for (const path of [scenarios.randomInline, scenarios.randomProbe]) {
+      const res = await fetchOk(app, path);
+      expect(res.headers["content-type"]).toContain("text/html");
+      expect(res.body).toContain('<meta charset="utf-8">');
+      expect(scriptSources(res.body), path).toEqual([]);
+      expect(inlineScript(res.body), path).not.toBe("");
+    }
+  });
+
+  it("pick.js は Math.random の値で絵を選ぶ", async () => {
+    const [pick] = await scriptsOf(scenarios.randomPick);
+    expectPicked(run([pick!], { Math: mathWith(() => 0.5) }), 500_000);
+    expectPicked(run([pick!], { Math: mathWith(() => 0) }), 0);
+    expectPicked(run([pick!], { Math: mathWith(() => 0.999_999_9) }), 999_999);
+  });
+
+  it("uuid.js は crypto.randomUUID の頭の 32 ビットで絵を選ぶ", async () => {
+    const [uuid] = await scriptsOf(scenarios.randomUuid);
+    // 0x12345678 = 305419896
+    const crypto = { randomUUID: () => "12345678-9abc-4def-8123-456789abcdef" };
+    expectPicked(run([uuid!], { crypto }), 419_896);
+  });
+
+  it("uuid.js は randomUUID の無い頁（secure context でない）で、題にそう書いて何も選ばない", async () => {
+    const [uuid] = await scriptsOf(scenarios.randomUuid);
+    expect(run([uuid!], { crypto: {} })).toEqual({ made: [], title: "no randomUUID" });
+  });
+
+  it("bytes.js は crypto.getRandomValues の 1 語で絵を選ぶ", async () => {
+    const [bytes] = await scriptsOf(scenarios.randomBytes);
+    const crypto = {
+      getRandomValues: (array: Uint32Array) => {
+        array[0] = 4_294_967_295;
+        return array;
+      },
+    };
+    expectPicked(run([bytes!], { crypto }), 967_295);
+  });
+
+  it("late.js は 300 ms 後の timer の中で選び、それまでは何も足さない", async () => {
+    const [late] = await scriptsOf(scenarios.randomLate);
+    const timers: { fn: () => void; ms: number }[] = [];
+    const made: Made[] = [];
+    const document = { title: "", body: { appendChild: (el: Made) => made.push(el) }, createElement: (): Made => ({}) };
+    const context = createContext({
+      document,
+      Math: mathWith(() => 0.75),
+      setTimeout: (fn: () => void, ms: number) => timers.push({ fn, ms }),
+    });
+    runInContext(late!, context);
+    expect(made).toEqual([]);
+    expect(timers.map((t) => t.ms)).toEqual([300]);
+    timers[0]!.fn();
+    expectPicked({ made, title: document.title }, 750_000);
+  });
+
+  it("two-scripts は noise.js が 40 回引いてから pick.js が選ぶ —— 選ぶのは頁の 41 回目", async () => {
+    const scripts = await scriptsOf(scenarios.randomTwoScripts);
+    const { math, draws } = sequence();
+    expectPicked(run(scripts, { Math: math }), (41 / 64) * 1_000_000);
+    expect(draws()).toBe(41);
+  });
+
+  it("inline の script は Math.random の値で絵を選ぶ", async () => {
+    const script = inlineScript((await fetchOk(app, scenarios.randomInline)).body);
+    expectPicked(run([script], { Math: mathWith(() => 0.25) }), 250_000);
+  });
+
+  it.each([
+    ["racy", scenarios.randomRacy],
+    ["helper", scenarios.randomHelper],
+  ])("%s は時計の ms を 5 で割った余りの回数だけ先に引き、その次で選ぶ", async (_name, path) => {
+    const [source] = await scriptsOf(path);
+    for (const [now, k] of [
+      [3.7, 3],
+      [5, 0],
+      [9, 4],
+    ] as const) {
+      const { math, draws } = sequence();
+      expectPicked(run([source!], { Math: math, performance: { now: () => now } }), ((k + 1) / 64) * 1_000_000);
+      expect(draws(), `now=${String(now)}`).toBe(k + 1);
+    }
+  });
+
+  it("racy は先に引く行と選ぶ行が別、helper は全部の Math.random が 1 行に在る", async () => {
+    const [racy] = await scriptsOf(scenarios.randomRacy);
+    const [helper] = await scriptsOf(scenarios.randomHelper);
+    const linesWithRandom = (source: string): number =>
+      source.split("\n").filter((line) => line.includes("Math.random()")).length;
+    expect(linesWithRandom(racy!)).toBe(2);
+    expect(linesWithRandom(helper!)).toBe(1);
+  });
+
+  it("time.js は乱数ではなく Date.now() で選ぶ", async () => {
+    const [time] = await scriptsOf(scenarios.randomTime);
+    expectPicked(run([time!], { Date: { now: () => 1_234_567_890 }, Math: mathWith(() => 0.5) }), 567_890);
+  });
+
+  it("worker は worker-pick.js を worker で走らせ、送り返された数で選ぶ", async () => {
+    const [page] = await scriptsOf(scenarios.randomWorker);
+    const workers: { url: string; onmessage?: (event: { data: unknown }) => void }[] = [];
+    const made: Made[] = [];
+    const document = { title: "", body: { appendChild: (el: Made) => made.push(el) }, createElement: (): Made => ({}) };
+    runInContext(
+      page!,
+      createContext({
+        document,
+        // The page draws nothing itself: a draw here would be the page's, not the worker's.
+        Math: mathWith(() => {
+          throw new Error("the page drew");
+        }),
+        Worker: function Worker(this: { url: string }, url: string) {
+          this.url = url;
+          workers.push(this);
+        },
+      }),
+    );
+    expect(workers.map((w) => w.url)).toEqual(["/random/worker-pick.js"]);
+    const posted: unknown[] = [];
+    runInContext(
+      (await fetchOk(app, "/random/worker-pick.js")).body,
+      createContext({ Math: mathWith(() => 0.125), postMessage: (data: unknown) => posted.push(data) }),
+    );
+    expect(posted).toEqual([125_000]);
+    workers[0]!.onmessage!({ data: posted[0] });
+    expectPicked({ made, title: document.title }, 125_000);
+  });
+
+  it("busy.js?n=3 は 3 回捨ててから 4 回目で選ぶ", async () => {
+    const [busy] = await scriptsOf(scenarios.randomBusy(3));
+    const { math, draws } = sequence();
+    expectPicked(run([busy!], { Math: math }), (4 / 64) * 1_000_000);
+    expect(draws()).toBe(4);
+  });
+
+  it("busy は n を省くと 1000 回捨てる", async () => {
+    expect(scriptSources((await fetchOk(app, "/random/busy")).body)).toEqual(["/random/busy.js?n=1000"]);
+  });
+
+  it("busy と busy.js は n を 0 から 2,000,000 の整数に限る", async () => {
+    for (const path of ["/random/busy", "/random/busy.js"]) {
+      for (const n of ["-1", "2000001", "abc", "1.5"]) {
+        await fetchOk(app, `${path}?n=${n}`, 400);
+      }
+      for (const n of ["0", "2000000"]) {
+        await fetchOk(app, `${path}?n=${n}`);
+      }
+    }
+  });
+
+  it("probe は何も引かず、乱数の源の姿と window の名前を JSON で書く", async () => {
+    const script = inlineScript((await fetchOk(app, scenarios.randomProbe)).body);
+    const pre = { textContent: "pending" };
+    const never = (): never => {
+      throw new Error("the probe drew");
+    };
+    runInContext(
+      script,
+      createContext({
+        document: { getElementById: (id: string) => (id === "probe" ? pre : null) },
+        Math: mathWith(never),
+        crypto: { getRandomValues: never, randomUUID: never },
+        window: { zeta: 1, alpha: 2 },
+      }),
+    );
+    const written = JSON.parse(pre.textContent) as Record<string, unknown>;
+    expect(Object.keys(written)).toEqual(["mathRandom", "getRandomValues", "randomUUID", "globals"]);
+    expect(written["globals"]).toEqual(["alpha", "zeta"]);
+    for (const key of ["mathRandom", "getRandomValues", "randomUUID"]) {
+      expect(written[key], key).toContain("the probe drew");
+    }
+  });
+
+  it("frame は pick を同じ origin の iframe に入れる", async () => {
+    const res = await fetchOk(app, scenarios.randomFrame);
+    expect(res.body).toContain(`<iframe src="${scenarios.randomPick}" width="360" height="120"></iframe>`);
+  });
+
+  it("frame-other は pick を渡された origin の iframe に入れ、embedOrigin が無ければ断る", async () => {
+    const res = await fetchOk(app, scenarios.randomFrameOther("http://other.test:8080"));
+    expect(res.body).toContain(`<iframe src="http://other.test:8080${scenarios.randomPick}" width="360" height="120"></iframe>`);
+    await fetchOk(app, "/random/frame-other", 400);
+    await fetchOk(app, "/random/frame-other?embedOrigin=javascript%3Aalert(1)", 400);
+  });
+
+  it("/random/ は frame-other を除く 13 頁にだけリンクする", async () => {
+    const res = await fetchOk(app, scenarios.randomIndex);
+    const links = [...res.body.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]);
+    expect(links).toEqual([
+      scenarios.randomPick,
+      scenarios.randomUuid,
+      scenarios.randomBytes,
+      scenarios.randomLate,
+      scenarios.randomTwoScripts,
+      scenarios.randomInline,
+      scenarios.randomFrame,
+      scenarios.randomRacy,
+      scenarios.randomHelper,
+      scenarios.randomTime,
+      scenarios.randomWorker,
+      "/random/busy",
+      scenarios.randomProbe,
+    ]);
+    for (const link of links) await fetchOk(app, link!);
+  });
+
+  it("img は数を字で描いた SVG で、同じ n には同じバイト列", async () => {
+    for (const n of [0, 7, 999_999]) {
+      const res = await fetchOk(app, scenarios.randomImage(n));
+      expect(res.headers["content-type"]).toContain("image/svg+xml");
+      expect(res.body).toContain(`>${String(n)}</text>`);
+      expect((await fetchOk(app, scenarios.randomImage(n))).body).toBe(res.body);
+    }
+    expect((await fetchOk(app, scenarios.randomImage(7))).body).not.toBe((await fetchOk(app, scenarios.randomImage(8))).body);
+  });
+
+  it("img は選ぶ側が書かない綴りを 404 で返す", async () => {
+    for (const file of ["-1.svg", "1000000.svg", "007.svg", "abc.svg", "abc", "7", "7.png"]) {
+      await fetchOk(app, `/random/img/${file}`, 404);
+    }
   });
 });
 
@@ -1608,6 +1931,10 @@ describe("malformed scenario parameters", () => {
     ["marked console embedOrigin with a path", "/marked/console/writes/public?tag=t1&embedOrigin=http%3A%2F%2Fb.test%2Fx"],
     ["marked console frame name with an uppercase letter", "/marked/console/silent/Public/frame?tag=t1"],
     ["marked console worker without a tag", "/marked/console/writes/public/worker.js"],
+    ["random frame-other without embedOrigin", "/random/frame-other"],
+    ["random frame-other embedOrigin with a path", "/random/frame-other?embedOrigin=http%3A%2F%2Fb.test%2Fx"],
+    ["random busy n over the ceiling", "/random/busy?n=2000001"],
+    ["random busy script n not a number", "/random/busy.js?n=abc"],
   ])("rejects %s", async (_name, url) => {
     expect((await app.inject(url)).statusCode).toBe(400);
   });
@@ -1633,6 +1960,8 @@ describe("malformed scenario parameters", () => {
     ["/marked/page/secret?tag=t1", 200],
     ["/marked/server-redirect/1/secret?tag=t1", 302],
     ["/marked/server-redirect/20/secret?tag=t1", 302],
+    ["/random/busy?n=2000000", 200],
+    ["/random/busy.js?n=0", 200],
   ])("still serves %s", async (url, expected) => {
     expect((await app.inject(url)).statusCode).toBe(expected);
   });

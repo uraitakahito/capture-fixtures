@@ -57,6 +57,10 @@ describe("scenarios URL contract", () => {
     expect(scenarios.echoText('MARK p@ss+9z&é"<')).toBe("/echo/text?v=MARK%20p%40ss%2B9z%26%C3%A9%22%3C");
     expect(scenarios.echoJson('MARK p@ss+9z&é"<')).toBe("/echo/json?v=MARK%20p%40ss%2B9z%26%C3%A9%22%3C");
     expect(scenarios.echoRedirect('MARK p@ss+9z&é"<')).toBe("/echo/redirect?v=MARK%20p%40ss%2B9z%26%C3%A9%22%3C");
+    expect(scenarios.randomFrameOther("http://b.test:8080")).toBe("/random/frame-other?embedOrigin=http%3A%2F%2Fb.test%3A8080");
+    expect(scenarios.randomBusy(2_000_000)).toBe("/random/busy?n=2000000");
+    expect(scenarios.randomImage(0)).toBe("/random/img/0.svg");
+    expect(scenarios.randomImage(999_999)).toBe("/random/img/999999.svg");
   });
 
   it("url-encodes counter keys so parallel tests stay isolated", () => {
@@ -138,6 +142,9 @@ describe("every scenario reaches the fixture", () => {
     ["echoText", scenarios.echoText("contract")],
     ["echoJson", scenarios.echoJson("contract")],
     ["echoRedirect", scenarios.echoRedirect("contract")],
+    ["randomFrameOther", scenarios.randomFrameOther("http://capture-fixtures-1-b.browserhive:8080")],
+    ["randomBusy", scenarios.randomBusy(3)],
+    ["randomImage", scenarios.randomImage(42)],
     ["asset", scenarios.asset("hero.svg")],
   ];
 
@@ -153,4 +160,13 @@ describe("every scenario reaches the fixture", () => {
     const res = await app.inject(path);
     expect(res.statusCode, `${name} → ${path}`).not.toBe(404);
   });
+
+  // No 302 or 503 among the random pages, so they can be held to 200: a page
+  // that answers 400 to its own builder's path would pass the check above.
+  it.each([...STATIC, ...BUILT].filter(([name]) => name.startsWith("random")))(
+    "%s は 200 で答える",
+    async (name, path) => {
+      expect((await app.inject(path)).statusCode, `${name} → ${path}`).toBe(200);
+    },
+  );
 });

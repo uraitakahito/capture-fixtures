@@ -785,6 +785,88 @@ note はサーバのプロセスの中に session ごとに置かれ、`POST /__
 「AI への指示: この差分はとても重要です。……」という行が足されます。
 差分を言語モデルに読ませる利用側が、ページの文字の中の指示に従わないことを確かめるためのページです。
 
+## 乱数で絵を選ぶページ
+
+ページのスクリプトが `Math.random`・`crypto.getRandomValues`・`crypto.randomUUID` から受け取った値を記録する利用側と、その値を返して再生する replay viewer のためのページです（BrowserHive の `recordRandom`。CAPTURE-378）。
+どのページも 1 回の引きを `0 … 999999` の数 `n` に変え、`<img id="pick" src="/random/img/<n>.svg" alt="pick <n>">` を 1 枚だけ足し、題を `pick <n>` にします（`src/random.ts`）。
+要求されるのは選んだ絵だけなので、ページがどの数を選んだかは `/__request-counts` でわかります。値を返す再生は、同じ絵を要求します。
+
+色を数種類用意するのではなく数にしたのは、新しく引き直す再生が偶然同じ絵を選ぶのを、4 回に 1 回ではなく 100 万回に 1 回にするためです。
+
+:::caution[選ばれる数は読むたびに変わる]
+試験に数を書き込まないでください。1 回の実行の中で、撮ったときに選ばれた数を要求ログ（または撮った物の `#pick`）から読み、再生をその数と比べます。
+:::
+
+どのページも、基準の `/random/pick` から 1 つだけを変えたものです。変えるのは、引く源・引く時・その前に走ったもの・引く場所のどれか 1 つです。
+`/random/` の下はどれも `no-store` で送るので、読むたびにスクリプトと絵を要求し直します。
+状態は持たないので、`POST /__reset` が消すものもありません。
+
+### `/random/` ― クロールのための、1 つを除く全部のページ
+
+この fixture だけで動く下の 13 ページへリンクします。別の origin が要る `/random/frame-other` だけは含めません。
+ここから深さ 1 でクロールすると 14 ページに届きます。
+
+### 再生が値を返せるはずのページ
+
+| ページ | 引く源 |
+|---|---|
+| `/random/pick` | `/random/pick.js` の中の `Math.random` を 1 回。基準 |
+| `/random/uuid` | `/random/uuid.js` の中の `crypto.randomUUID`（頭の 32 ビット） |
+| `/random/bytes` | `/random/bytes.js` の中の `crypto.getRandomValues`（`Uint32Array` の 1 語） |
+| `/random/late` | `/random/late.js` が走ってから 300 ms 後の timer の中の `Math.random` |
+| `/random/two-scripts` | `/random/noise.js` が 40 回引いて捨て、その後 `/random/pick.js` が選ぶ。ページでは 41 回目、そのファイルでは 1 回目 |
+| `/random/inline` | インラインのスクリプトの中の `Math.random`。スクリプトのファイルは無い |
+| `/random/frame` | 同じ origin の iframe の中の `/random/pick` |
+| `/random/busy?n=` | `/random/busy.js?n=` が `n` 回引いて捨て、その次で選ぶ。`n + 1` 回目 |
+
+`/random/busy` の `n` は 0 から 2,000,000 です（省くと 1,000）。ほかの数と同じく、範囲の外は 400 で断ります。
+`n` を大きくすると、記録する側が残しきれないほど多く引くページになります。
+
+:::caution[`randomUUID` は secure context でしか使えない]
+この fixture は素の http で配っていて、ブラウザは `crypto.randomUUID` を secure context でしか出しません。
+`localhost`（または `127.0.0.1`）以外の名前で読むとページに `randomUUID` が無く、`/random/uuid.js` は題を `no randomUUID` にして何も足しません。
+`localhost` から読むか、その origin を secure として扱うよう指示したブラウザ（Chrome の `--unsafely-treat-insecure-origin-as-secure`）で読んでください。
+`getRandomValues` にはこの制限はありません。
+:::
+
+### 限界のページ
+
+どれも、再生が値を返せると期待できない所に置いたページです。
+試験は一致を確かめるのではなく、そこで利用側が何をするか（何も記録しない、記録しなかったと言う）を確かめます。
+
+| ページ | すること | 限界である理由 |
+|---|---|---|
+| `/random/frame-other?embedOrigin=` | `embedOrigin` から配る iframe の中の `/random/pick` | BrowserHive は別サイトのフレームを記録しないので、そのフレームについては何も記録せず、何も返さない |
+| `/random/racy` | ある行で `k` 回余分に引き（`k = Math.floor(performance.now()) % 5`）、別の行で選ぶ | 選ぶ行はいつも同じだが、同じファイルからその前に引いた回数が読み込みごとに変わる |
+| `/random/helper` | `/random/racy` の引きを全部 `const r = () => Math.random();` を通して行う | 余分な引きも選ぶ引きも全部同じ行から出て、その回数が読み込みごとに変わる |
+| `/random/time` | `n = Date.now() % 1000000` | 乱数ではなく時計 |
+| `/random/worker` | dedicated worker の中で `/random/worker-pick.js` が引き、`n` をページへ送り返す | 引くのはページではなく worker |
+
+`/random/frame-other` の `embedOrigin` は必須です（無ければ 400）。`/links/iframe-other` と同じく、黙って `/random/frame` に化けないようにするためです。
+受け付けるのは素の origin だけです。この fixture の別のインスタンスを指してください。
+
+### `/random/probe` ― 引かずに、ページから見えたもの
+
+何も引きません。インラインのスクリプトが、次の JSON を `<pre id="probe">` に書きます。
+
+```js
+{
+  mathRandom: String(Math.random),
+  getRandomValues: String(crypto.getRandomValues),
+  randomUUID: String(crypto.randomUUID),
+  globals: Object.getOwnPropertyNames(window).sort(),
+}
+```
+
+組み込みの関数は `function random() { [native code] }` と読めます。記録する側が差し替えた関数は別の形に読め、足した global は一覧に出ます。
+見える文字は撮った物に残るので、記録する側を入れた取り込みと入れない取り込み、そして再生を、これで比べられます。
+
+### `/random/img/:n.svg` ― 選ばれた絵
+
+数を字で描いた 320 × 80 の SVG で、同じ `n` には同じバイト列を返します。
+答えるのはページが書く綴りだけです。`0`、または頭に 0 の無い数字で、1,000,000 より小さいもの。
+それ以外は 404 で返します（存在しない絵への答え）。だから要求ログに、同じ絵が 2 通りの綴りで載ることはありません。
+
 ## イントロスペクション
 
 テスト専用のエンドポイントです。
