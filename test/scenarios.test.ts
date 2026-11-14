@@ -79,7 +79,8 @@ describe("scenarios URL contract", () => {
  * cleanly. It breaks in another repo's E2E suite, as a 404, much later.
  *
  * Only statuses and the count of entries are asserted here: every entry is
- * listed, none is a 404, and the random and viewport pages answer exactly 200.
+ * listed, none is a 404, and the random, viewport and portrait pages answer
+ * exactly 200.
  * What each page contains is `fixture.test.ts` work.
  */
 describe("every scenario reaches the fixture", () => {
@@ -164,9 +165,11 @@ describe("every scenario reaches the fixture", () => {
     expect(res.statusCode, `${name} → ${path}`).not.toBe(404);
   });
 
-  // No 302 or 503 among the random and viewport pages, so they can be held to 200: a page
-  // that answers 400 to its own builder's path would pass the check above.
-  it.each([...STATIC, ...BUILT].filter(([name]) => name.startsWith("random") || name.startsWith("viewport")))(
+  // No 302 or 503 among the random, viewport and portrait pages, so they can be held to 200: a
+  // page that answers 400 to its own builder's path would pass the check above.
+  it.each(
+    [...STATIC, ...BUILT].filter(([name]) => ["random", "viewport", "portrait"].some((family) => name.startsWith(family))),
+  )(
     "%s は 200 で答える",
     async (name, path) => {
       expect((await app.inject(path)).statusCode, `${name} → ${path}`).toBe(200);

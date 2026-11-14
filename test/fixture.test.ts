@@ -24,6 +24,7 @@ import {
   type MarkedConsoleMode,
   type MarkedWindowWay,
 } from "../src/marked.js";
+import { PORTRAIT_FILES } from "../src/portrait.js";
 import { scenarios } from "../src/scenarios.js";
 import { VIEWPORT_FILES, VIEWPORT_IMAGE_NAMES, viewportImages, type ViewportWindow } from "../src/viewport.js";
 import { fetchOk } from "./helpers.js";
@@ -2141,5 +2142,86 @@ describe("窓と DPR で絵の版を選ぶページ（CAPTURE-422）", () => {
     // Every name a page can ask for, in some window, is one the route answers.
     const asked = new Set(WINDOWS.flatMap((w) => Object.values(viewportImages(w)).flat()));
     for (const name of asked) expect(VIEWPORT_IMAGE_NAMES, name).toContain(name);
+  });
+});
+
+describe("frameset の肖像の頁（CAPTURE-147）", () => {
+  /** Where the browser stands after the redirect; the host is never looked up. */
+  const BASE = "http://fixture.invalid";
+  /** `src`, `href` and `target`-like attributes, in document order. */
+  const attributes = (html: string, name: string): string[] =>
+    [...html.matchAll(new RegExp(`\\s${name}="([^"]*)"`, "g"))].map((match) => match[1]!);
+  /** A reference as the browser resolves it from the document at `documentPath`, as a path. */
+  const resolve = (reference: string, documentPath: string): string => new URL(reference, `${BASE}${documentPath}`).pathname;
+
+  it("3 つの文書は 200 の text/html で、画像は 200 の image/jpeg で返る", async () => {
+    for (const path of [scenarios.portraitIndex, scenarios.portraitMenu, scenarios.portraitTop]) {
+      expect((await fetchOk(app, path)).headers["content-type"], path).toMatch(/^text\/html\b/);
+    }
+    expect((await fetchOk(app, scenarios.portraitImage)).headers["content-type"]).toBe("image/jpeg");
+  });
+
+  // The numbers are written here rather than read from the file: swapping or
+  // truncating site/portrait/mona.jpg must turn this red.
+  it("画像は site/portrait/mona.jpg の 117,341 バイトの JPEG（500 × 745）そのまま", async () => {
+    const body = (await fetchOk(app, scenarios.portraitImage)).rawPayload;
+    expect(body.length).toBe(117_341);
+    expect(createHash("sha256").update(body).digest("hex")).toBe(
+      "12f3a161df70534079eb582149d17862f83b86987232d9c944e81123499e4389",
+    );
+    // SOI, then a baseline frame header (SOF0) whose height and width are 745 and 500.
+    expect(body.subarray(0, 2).toString("hex")).toBe("ffd8");
+    const sof = body.indexOf(Buffer.from([0xff, 0xc0]));
+    expect([body.readUInt16BE(sof + 5), body.readUInt16BE(sof + 7)]).toEqual([745, 500]);
+  });
+
+  it("一番上の文書は frameset で、左に menu.htm（left）・右に top.htm（right）", async () => {
+    const html = (await fetchOk(app, scenarios.portraitIndex)).body;
+    expect(html).toContain("<frameset cols=18,82>");
+    const frames = [...html.matchAll(/<frame\s[^>]*>/g)].map(([tag]) => ({
+      src: attributes(tag, "src")[0],
+      name: attributes(tag, "name")[0],
+    }));
+    expect(frames).toEqual([
+      { src: "menu.htm", name: "left" },
+      { src: "top.htm", name: "right" },
+    ]);
+    // Nothing to see but the frames: no <body> outside <noframes>.
+    expect(html.replace(/<noframes>[\s\S]*<\/noframes>/, "")).not.toContain("<body");
+  });
+
+  it("右の枠は写真を 350 × 522 で描き、左の枠のリンクは右の枠に top.htm を開く", async () => {
+    const top = (await fetchOk(app, scenarios.portraitTop)).body;
+    expect(top).toContain(`<img src="mona.jpg" width="350" height="522"`);
+    const menu = (await fetchOk(app, scenarios.portraitMenu)).body;
+    expect(menu).toContain(`<a href="top.htm" target="right">`);
+  });
+
+  it("/portrait は /portrait/ へ 301 で転送する", async () => {
+    const res = await fetchOk(app, "/portrait", 301);
+    expect(res.headers.location).toBe(scenarios.portraitIndex);
+  });
+
+  // Why the redirect is there: the same references, resolved from /portrait,
+  // land outside the family.
+  it("転送の先から相対の参照を解くと、どれも 200 で返る（/portrait からでは /menu.htm になる）", async () => {
+    const landed = (await fetchOk(app, "/portrait", 301)).headers.location!;
+    const html = (await fetchOk(app, landed)).body;
+    const frames = attributes(html, "src").map((src) => resolve(src, landed));
+    expect(frames).toEqual([scenarios.portraitMenu, scenarios.portraitTop]);
+    const top = (await fetchOk(app, scenarios.portraitTop)).body;
+    const image = resolve(attributes(top, "src")[0]!, scenarios.portraitTop);
+    expect(image).toBe(scenarios.portraitImage);
+    for (const path of [...frames, image]) await fetchOk(app, path);
+    expect(attributes(html, "src").map((src) => resolve(src, "/portrait"))).toEqual(["/menu.htm", "/top.htm"]);
+  });
+
+  it("どの文書も外を参照しない（src・href は相対で、scheme も // も無い）", () => {
+    const references = Object.values(PORTRAIT_FILES).flatMap(({ body }) => [
+      ...attributes(body, "src"),
+      ...attributes(body, "href"),
+    ]);
+    expect(references.length).toBeGreaterThan(0);
+    for (const reference of references) expect(reference, reference).toMatch(/^[a-z]+\.(htm|jpg)$/);
   });
 });

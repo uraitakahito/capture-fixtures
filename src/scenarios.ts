@@ -606,6 +606,22 @@ export const scenarios = {
   /** An image a viewport page asks for, by name (e.g. `width-l-1x`). A name no page asks for is a 404. */
   viewportImage: (name: string): string => `/viewport/img/${name}.svg`,
 
+  /**
+   * A frameset homepage (CAPTURE-147): the top document holds only a
+   * `<frameset>`, with {@link scenarios.portraitMenu} in the left frame
+   * (`name="left"`) and {@link scenarios.portraitTop} in the right one
+   * (`name="right"`). For a capture that copies each child frame's document,
+   * and for a script that finds the face in the photograph. Every reference is
+   * relative; `/portrait` redirects (301) here.
+   */
+  portraitIndex: "/portrait/",
+  /** The left frame: a menu whose one link targets the right frame. */
+  portraitMenu: "/portrait/menu.htm",
+  /** The right frame: {@link scenarios.portraitImage} drawn at 350 × 522, and a caption. */
+  portraitTop: "/portrait/top.htm",
+  /** The photograph: a public-domain Mona Lisa, a 500 × 745 JPEG, from `site/portrait/mona.jpg`. */
+  portraitImage: "/portrait/mona.jpg",
+
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */
   asset: (path: string): string => `/assets/${path}`,
 } as const;

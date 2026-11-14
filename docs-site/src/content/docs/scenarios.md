@@ -1015,6 +1015,42 @@ Links to the five pages above. A crawl of depth 1 from here reaches 6 pages.
 The name as text, 320 × 80. Only names a page here asks for are answered; any
 other is a 404, the answer for an image that does not exist.
 
+## A homepage in frames
+
+`/portrait/` is a homepage built the old way: the top document holds nothing
+but a `<frameset cols=18,82>`, with `menu.htm` in the left frame
+(`name="left"`) and `top.htm` in the right one (`name="right"`). The right
+frame shows a photograph of a face. Two things use it (CAPTURE-147):
+
+- **BrowserHive's copy of each child frame.** A capture that keeps the document
+  as it was drawn has to find the documents inside `<frame>`; copying only the
+  top one keeps an empty frameset.
+- **The `face-mustache` script in
+  [capture-scripts](https://github.com/uraitakahito/capture-scripts)**, run in
+  the capture's page. It has to reach into the right-hand frame to find the
+  photograph.
+
+| Path | What it is |
+|---|---|
+| `/portrait/` | the frameset |
+| `/portrait/menu.htm` | the left frame: a menu whose one link opens `top.htm` in the right frame |
+| `/portrait/top.htm` | the right frame: the photograph at 350 × 522, a caption, and a box of news |
+| `/portrait/mona.jpg` | the photograph, a 500 × 745 JPEG |
+| `/portrait` | a 301 to `/portrait/` |
+
+Every reference is relative (`menu.htm`, `top.htm`, `mona.jpg`), as on the pages
+this imitates, so the pages work only under `/portrait/` — from `/portrait`,
+`menu.htm` would resolve to `/menu.htm`. That is what the redirect is for.
+Nothing here refers to another host. The text is in Japanese, as on those
+pages (`src/portrait.ts`).
+
+The photograph is "Mona Lisa, by Leonardo da Vinci, from C2RMF retouched"
+from [Wikimedia Commons](https://commons.wikimedia.org/), scaled to 500 px
+wide. The painting and the photograph are in the public domain (PD-Art). The
+file is `site/portrait/mona.jpg`, committed as it is; the server reads it once,
+when it is built, so a missing file stops the fixture from starting. Like
+everything in `site/`, it is also served as `/assets/portrait/mona.jpg`.
+
 ## Introspection
 
 Test-only endpoints. The request counts and the request log exist because

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
 import { join } from "node:path";
 import { Readable, type Duplex } from "node:stream";
@@ -37,7 +38,11 @@ import {
   randomFrameOtherHtml,
   randomImageSvg,
 } from "./random.js";
+import { PORTRAIT_FILES, PORTRAIT_IMAGE } from "./portrait.js";
 import { VIEWPORT_FILES, VIEWPORT_IMAGE_NAMES, viewportImageSvg } from "./viewport.js";
+
+/** `site/`: served under /assets/, and the place a page family keeps a file it serves at a path of its own. */
+const SITE = join(import.meta.dirname, "..", "site");
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
@@ -1393,7 +1398,7 @@ export function buildFixture(): FastifyInstance {
 
   // Static assets (referenced by /lazy-images and /responsive-images, and available as /assets/*).
   void app.register(fastifyStatic, {
-    root: join(import.meta.dirname, "..", "site"),
+    root: SITE,
     prefix: "/assets/",
   });
 
@@ -2110,6 +2115,18 @@ export function buildFixture(): FastifyInstance {
     }
     return reply.header("cache-control", "no-store").type("image/svg+xml").send(viewportImageSvg(name));
   });
+
+  // A frameset homepage with a photograph in its right frame (src/portrait.ts).
+  // Its references are relative, so /portrait has to become /portrait/ before
+  // the browser resolves them: from /portrait, "menu.htm" would be /menu.htm.
+  // The photograph is read here, once, so a missing file stops the fixture from
+  // being built rather than turning into a 500 on the one request that needs it.
+  const portraitImage = readFileSync(join(SITE, ...PORTRAIT_IMAGE.site));
+  app.get("/portrait", (_request, reply) => reply.redirect("/portrait/", 301));
+  for (const [path, { type, body }] of Object.entries(PORTRAIT_FILES)) {
+    app.get(path, (_request, reply) => reply.type(type).send(body));
+  }
+  app.get(PORTRAIT_IMAGE.path, (_request, reply) => reply.type(PORTRAIT_IMAGE.type).send(portraitImage));
 
   // Pages that pick an image by a random draw (src/random.ts). Nothing here keeps
   // state: what a page picked is in the request log, not in the server. All of
