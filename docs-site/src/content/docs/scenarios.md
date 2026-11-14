@@ -875,6 +875,106 @@ on the page adds a line addressed to an AI that reads the difference. A
 consumer that has a language model read the difference uses it to check that
 the model does not follow instructions found in the page's text.
 
+## Pages that pick by a random draw
+
+For a consumer that records the values page script received from
+`Math.random`, `crypto.getRandomValues` and `crypto.randomUUID`, and a replay
+viewer that hands them back (BrowserHive's `recordRandom`, CAPTURE-378). Each
+page turns one draw into a number `n` in `0 … 999999`, appends one
+`<img id="pick" src="/random/img/<n>.svg" alt="pick <n>">` and sets its title to
+`pick <n>` (`src/random.ts`). Only the picked image is requested, so
+`/__request-counts` says which number the page picked, and a replay that hands
+the values back asks for the same image.
+
+A number rather than a handful of colours: a replay that draws afresh picks the
+same image by chance once in a million loads, not once in four.
+
+:::caution[The number differs on every load]
+Never hard-code it. Within one run, read what the capture picked from the
+request log (or from the captured `#pick`), then hold the replay to that number.
+:::
+
+Every page is the baseline, `/random/pick`, with one thing changed: where the
+draw comes from, when it happens, what ran before it, or where it runs.
+Everything under `/random/` is sent `no-store`, so every load asks again for the
+scripts and the image. The pages keep no state; `POST /__reset` has nothing of
+theirs to clear.
+
+### `/random/` — every page but one, for a crawl
+
+Links to the thirteen pages below that need nothing but this fixture — all but
+`/random/frame-other`, which needs a second origin. A crawl of depth 1 from here
+reaches 14 pages.
+
+### Pages a replay should hand back
+
+| Page | Where the draw comes from |
+|---|---|
+| `/random/pick` | `Math.random`, once, in `/random/pick.js` — the baseline |
+| `/random/uuid` | `crypto.randomUUID` (its first 32 bits), in `/random/uuid.js` |
+| `/random/bytes` | `crypto.getRandomValues` (one `Uint32Array` word), in `/random/bytes.js` |
+| `/random/late` | `Math.random` from a timer 300 ms after `/random/late.js` runs |
+| `/random/two-scripts` | `/random/noise.js` draws 40 times and keeps nothing, then `/random/pick.js` picks: the page's 41st draw and its file's first |
+| `/random/inline` | `Math.random` in an inline script — no script file |
+| `/random/frame` | `/random/pick` in a same-origin iframe |
+| `/random/busy?n=` | `/random/busy.js?n=` draws `n` times and keeps nothing, then picks: draw `n + 1` |
+
+`n` on `/random/busy` is 0 to 2,000,000 (1,000 when left out); anything else is
+a 400, as for every other count here. A large `n` is a page with far more draws
+than any recorder would want to keep.
+
+:::caution[`randomUUID` needs a secure context]
+This fixture serves plain http, and a browser offers `crypto.randomUUID` only in
+a secure context. Under any name but `localhost` (or `127.0.0.1`) the page has
+no `randomUUID`; `/random/uuid.js` then sets the title to `no randomUUID` and
+appends nothing. Load it from `localhost`, or in a browser told to treat the
+origin as secure (Chrome's `--unsafely-treat-insecure-origin-as-secure`).
+`getRandomValues` has no such limit.
+:::
+
+### Limit pages
+
+Each of these is written to sit outside what a replay can be expected to hand
+back. A test asserts what the consumer does there — records nothing, says so —
+rather than a match.
+
+| Page | What it does | Why it is a limit |
+|---|---|---|
+| `/random/frame-other?embedOrigin=` | `/random/pick` in an iframe served by `embedOrigin` | BrowserHive does not record a frame from another site, so nothing is recorded or handed back for it |
+| `/random/racy` | draws `k` extra times on one line, `k = Math.floor(performance.now()) % 5`, then picks on another | the pick is always its own line, but how many draws came before it from the same file changes between loads |
+| `/random/helper` | `/random/racy` with every draw made through `const r = () => Math.random();` | the extra draws and the pick all come from the same line, and their number changes between loads |
+| `/random/time` | `n = Date.now() % 1000000` | the clock, not a random source |
+| `/random/worker` | `/random/worker-pick.js` draws in a dedicated worker and posts `n` back | the draw is made in the worker, not in the page |
+
+`embedOrigin` is required on `/random/frame-other` (400 without it), as on
+`/links/iframe-other`, so the page cannot quietly turn into `/random/frame`. Only
+a bare origin is accepted. Point it at another instance of this fixture.
+
+### `/random/probe` — what the page saw, with no draw
+
+Draws nothing. An inline script writes into `<pre id="probe">` the JSON of
+
+```js
+{
+  mathRandom: String(Math.random),
+  getRandomValues: String(crypto.getRandomValues),
+  randomUUID: String(crypto.randomUUID),
+  globals: Object.getOwnPropertyNames(window).sort(),
+}
+```
+
+A built-in reads `function random() { [native code] }`; one a recorder replaced
+reads otherwise, and a global it added shows in the list. The visible text is
+what a capture keeps, so captures with and without the recorder, and the
+replay, can be compared on it.
+
+### `/random/img/:n.svg` — the picked image
+
+The number as text, 320 × 80, the same bytes for the same `n`. Only the spelling
+the pages write is answered — `0`, or digits with no leading zero, below
+1,000,000. Anything else is a 404, the answer for an image that does not exist,
+so a request log never holds two spellings of one pick.
+
 ## Introspection
 
 Test-only endpoints. The request counts and the request log exist because

@@ -527,6 +527,64 @@ export const scenarios = {
   /** A 302 to {@link scenarios.echoText}, with `v` percent-encoded in `Location`. */
   echoRedirect: (v: string): string => `/echo/redirect?v=${encodeURIComponent(v)}`,
 
+  /**
+   * Links to every random page below but {@link scenarios.randomFrameOther}
+   * (CAPTURE-378). Each of those turns one draw into `n` in `0 … 999999` and
+   * appends one `<img id="pick">` of {@link scenarios.randomImage} `(n)`, so the
+   * request log says what the page picked. A crawl of depth 1 from here reaches
+   * 14 pages.
+   */
+  randomIndex: "/random/",
+  /** Picks with `Math.random`, once, from a script file — the baseline. */
+  randomPick: "/random/pick",
+  /**
+   * Picks with `crypto.randomUUID`. A secure context only: over plain http under
+   * any name but `localhost`, the page has no `randomUUID` and its title says
+   * `no randomUUID`.
+   */
+  randomUuid: "/random/uuid",
+  /** Picks with `crypto.getRandomValues`. */
+  randomBytes: "/random/bytes",
+  /** Picks with `Math.random` from a timer, 300 ms after its script runs. */
+  randomLate: "/random/late",
+  /** Draws 40 times in one script file, then picks in another: the pick is the page's 41st draw. */
+  randomTwoScripts: "/random/two-scripts",
+  /** Picks with `Math.random` from an inline script — no script file. */
+  randomInline: "/random/inline",
+  /** {@link scenarios.randomPick} in a same-origin iframe. */
+  randomFrame: "/random/frame",
+  /**
+   * {@link scenarios.randomPick} in an iframe served by `origin` — another
+   * instance of this fixture. A limit page: a recorder that does not follow
+   * frames from another site has nothing to give back. Without `origin` the
+   * route answers 400.
+   */
+  randomFrameOther: (origin: string): string => `/random/frame-other?embedOrigin=${encodeURIComponent(origin)}`,
+  /**
+   * Draws 0–4 extra times, by the clock, on one line, then picks on another. A
+   * limit page: how many draws come before the pick changes between loads.
+   */
+  randomRacy: "/random/racy",
+  /**
+   * {@link scenarios.randomRacy} with every draw made through one helper, so
+   * every draw comes from the same line. A limit page.
+   */
+  randomHelper: "/random/helper",
+  /** Picks with `Date.now()` — the clock, not a random source. A limit page. */
+  randomTime: "/random/time",
+  /** Picks with `Math.random` in a dedicated worker, which posts the number back. A limit page. */
+  randomWorker: "/random/worker",
+  /** Draws `count` times and keeps nothing, then picks: the pick is draw `count + 1`. `count` is 0 to 2,000,000. */
+  randomBusy: (count: number): string => `/random/busy?n=${String(count)}`,
+  /**
+   * Draws nothing. Writes into `<pre id="probe">` the JSON of `String()` of the
+   * three random sources and the sorted names of `window`'s own properties, so
+   * two captures can be compared on what the page saw.
+   */
+  randomProbe: "/random/probe",
+  /** The image a random page appends for `n`: the number as text. Any other spelling is a 404. */
+  randomImage: (n: number): string => `/random/img/${String(n)}.svg`,
+
   /** A static asset served from `site/`, e.g. `scenarios.asset("hero.svg")`. */
   asset: (path: string): string => `/assets/${path}`,
 } as const;

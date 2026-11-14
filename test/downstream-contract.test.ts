@@ -36,6 +36,7 @@ import { scenarios } from "../src/scenarios.js";
  *   browserhive/test/e2e/script-values.e2e.test.ts  (CAPTURE-166)
  *                                                loginForm, loginAfter, LOGIN_SUBMIT, echoText, echoJson,
  *                                                echoBytes, echoRedirect   ← see below
+ *   (not yet written, CAPTURE-378)               randomFrameOther(origin), randomBusy(1_000_000)   ← see below
  *
  * The `largeStorage` row was the exception to "actually passes" when it was
  * recorded: `/large-storage` and the consumer's storage cap were written
@@ -102,6 +103,15 @@ import { scenarios } from "../src/scenarios.js";
  * to change its spelling when encoded, so the rows spell one: a pattern added to
  * `v`, to `note` or to the header would refuse it here first. `loginAfter` has no
  * session in this row, so it answers 403, which is not what this suite watches.
+ *
+ * So are the random rows (2026-11-14): `/random/*` was written for BrowserHive's
+ * test that a capture records what page script drew from `Math.random` and
+ * `crypto` and that a replay hands it back (`recordRandom`, CAPTURE-378), which
+ * has not landed yet. Recorded ahead of the caller, like the settle rows. The
+ * frame-other row spells the longest b origin, as the embedOrigin row does. The
+ * busy row spells a million draws, the count meant to push a page past any cap
+ * a recorder puts on the values it keeps; replace it with the caller's own
+ * value when that lands.
  *
  * This is a copy, so it goes stale. Re-read the downstream call sites when
  * bumping the submodule; a green run here is evidence about the values below,
@@ -180,6 +190,11 @@ describe("values BrowserHive passes today", () => {
     ["echoText with a value that encoding respells", scenarios.echoText(RESPELLED)],
     ["echoJson with a value that encoding respells", scenarios.echoJson(RESPELLED)],
     ["echoRedirect with a value that encoding respells", scenarios.echoRedirect(RESPELLED)],
+    [
+      "randomFrameOther, its iframe from another site",
+      scenarios.randomFrameOther("http://capture-fixtures-3-b.browserhive:8080"),
+    ],
+    ["randomBusy a million draws before the pick", scenarios.randomBusy(1_000_000)],
   ])("%s is not refused", async (name, path) => {
     // 404, 503 and 302 are all legitimate answers; 400 means a bound is too
     // tight and the submodule bump would break the downstream suite.

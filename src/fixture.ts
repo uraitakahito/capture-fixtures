@@ -27,6 +27,16 @@ import {
   type MarkedConsoleMode,
   type MarkedWindowWay,
 } from "./marked.js";
+import {
+  DEFAULT_RANDOM_BUSY,
+  MAX_RANDOM_BUSY,
+  RANDOM_FILES,
+  RANDOM_IMAGE_FILE,
+  randomBusyHtml,
+  randomBusyJs,
+  randomFrameOtherHtml,
+  randomImageSvg,
+} from "./random.js";
 
 const PLAIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ok</title></head><body><h1>ok</h1></body></html>`;
 /**
@@ -2080,6 +2090,59 @@ export function buildFixture(): FastifyInstance {
       changingCounts.set(counter, n);
       return reply.type("text/html").send(CHANGING_PAGES[kind](n));
     },
+  );
+
+  // Pages that pick an image by a random draw (src/random.ts). Nothing here keeps
+  // state: what a page picked is in the request log, not in the server. All of
+  // it is `no-store`, so every load asks again for the scripts and the image,
+  // and the request log shows every pick.
+  for (const [path, { type, body }] of Object.entries(RANDOM_FILES)) {
+    app.get(path, (_request, reply) => reply.header("cache-control", "no-store").type(type).send(body));
+  }
+
+  // Not a schema: a spelling the pickers never write is a 404, the answer for an
+  // image that does not exist, rather than a 400 for a knob out of range.
+  app.get<{ Params: { file: string } }>("/random/img/:file", (request, reply) => {
+    const n = RANDOM_IMAGE_FILE.exec(request.params.file)?.[1];
+    if (n === undefined) {
+      reply.callNotFound();
+      return reply;
+    }
+    return reply.header("cache-control", "no-store").type("image/svg+xml").send(randomImageSvg(n));
+  });
+
+  app.get<{ Querystring: { embedOrigin: string } }>(
+    "/random/frame-other",
+    {
+      schema: {
+        querystring: {
+          type: "object",
+          properties: { embedOrigin: ORIGIN },
+          // Required, as on /links/iframe-other: without it the iframe would be
+          // same-origin, and the page would quietly turn into /random/frame.
+          required: ["embedOrigin"],
+        },
+      },
+    },
+    (request, reply) =>
+      reply.header("cache-control", "no-store").type("text/html").send(randomFrameOtherHtml(request.query.embedOrigin)),
+  );
+
+  app.get<{ Querystring: { n?: number } }>(
+    "/random/busy",
+    { schema: { querystring: numbers({ n: [0, MAX_RANDOM_BUSY] }) } },
+    (request, reply) =>
+      reply.header("cache-control", "no-store").type("text/html").send(randomBusyHtml(request.query.n ?? DEFAULT_RANDOM_BUSY)),
+  );
+
+  app.get<{ Querystring: { n?: number } }>(
+    "/random/busy.js",
+    { schema: { querystring: numbers({ n: [0, MAX_RANDOM_BUSY] }) } },
+    (request, reply) =>
+      reply
+        .header("cache-control", "no-store")
+        .type("text/javascript")
+        .send(randomBusyJs(request.query.n ?? DEFAULT_RANDOM_BUSY)),
   );
 
   // Test-only introspection: read counters, reset all in-memory state.
