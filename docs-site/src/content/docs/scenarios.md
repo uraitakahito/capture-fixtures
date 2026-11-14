@@ -95,7 +95,7 @@ website.
 :::caution[Do not "fix" this to use `IntersectionObserver`]
 Real feeds append with an observer. The `scroll` handler here is deliberate.
 
-BrowserHive's `autoscroll` decides it has reached the end by scrolling, waiting
+The `autoscroll` script ([capture-scripts](https://github.com/uraitakahito/capture-scripts)) decides it has reached the end by scrolling, waiting
 250ms, and checking whether `scrollY` moved. A `scroll` handler runs
 synchronously with the scroll, so the page has always grown by then. An
 observer callback is asynchronous, and one late callback produces a false

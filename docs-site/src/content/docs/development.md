@@ -29,14 +29,18 @@ build capture-fixtures explicitly as part of their own build.
 
 ## Adding a scenario
 
-Three places, in this order:
+Four places, in this order:
 
 1. **`src/fixture.ts`** — the route.
 2. **`src/scenarios.ts`** — the typed entry, inside the `// #region scenarios`
    markers. Consumers must never hard-code the path.
-3. **[Scenarios](/scenarios/)** — *why* it exists.
+3. **`test/scenarios.test.ts`** — a parameterised entry (a builder function)
+   goes in the `BUILT` list with a representative argument; the count check
+   ("covers every entry in the contract") fails otherwise. A static string
+   entry is picked up automatically.
+4. **[Scenarios](/scenarios/)** — *why* it exists.
 
-Step 3 is the one that gets skipped, and it is the one that matters. A route
+Step 4 is the one that gets skipped, and it is the one that matters. A route
 whose purpose is not written down becomes a route nobody dares delete: the next
 person can see what it returns but not what breaks if it goes away.
 
