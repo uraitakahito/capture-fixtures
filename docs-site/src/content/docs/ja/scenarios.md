@@ -93,7 +93,7 @@ HTML は正しく、エラーも無く、ただリプレイ時に画像が 404 �
 :::caution[`IntersectionObserver` に「直さない」でください]
 実物のフィードは observer で追加します。ここが `scroll` ハンドラなのは**意図的**です。
 
-BrowserHive の `autoscroll` は「スクロールして 250ms 待ち、`scrollY` が動いて
+`autoscroll` のスクリプト（[capture-scripts](https://github.com/uraitakahito/capture-scripts)）は「スクロールして 250ms 待ち、`scrollY` が動いて
 いなければ底」と判定します。`scroll` ハンドラはスクロールと**同期**で走るので、
 判定までに必ず伸びています。observer のコールバックは**非同期**で、
 遅れた 1 回が「底に着いた」という誤った報告を生みます。

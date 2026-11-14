@@ -69,11 +69,11 @@ const CLIENT_SIDE_REDIRECT_HTML = `<!doctype html><html><head><meta charset="utf
 /**
  * A page with no bottom.
  *
- * BrowserHive's `autoscroll` decides it has reached the end of a page by
- * scrolling, waiting 250ms and checking whether `scrollY` moved. So the page
- * has to have grown by then, every time — which is why the growing happens in
- * a `scroll` handler. Those run synchronously as the scroll is applied, so
- * they cannot be late.
+ * The `autoscroll` script (capture-scripts) decides it has reached the end of
+ * a page by scrolling, waiting 250ms and checking whether `scrollY` moved. So
+ * the page has to have grown by then, every time — which is why the growing
+ * happens in a `scroll` handler. Those run synchronously as the scroll is
+ * applied, so they cannot be late.
  *
  * An `IntersectionObserver` would look far more like a real feed, and that is
  * exactly the trap: its callback is asynchronous, and a late one leaves

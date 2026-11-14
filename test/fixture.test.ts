@@ -66,8 +66,8 @@ describe("static pages", () => {
     expect(res.statusCode).toBe(200);
     // The distinction this fixture exists for. A scroll handler runs
     // synchronously with the scroll, so the page has always grown by the time
-    // BrowserHive's autoscroll checks whether `scrollY` moved. An
-    // IntersectionObserver callback can be late, and a late one makes
+    // the `autoscroll` script (capture-scripts) checks whether `scrollY`
+    // moved. An IntersectionObserver callback can be late, and a late one makes
     // autoscroll report that it reached the bottom of a page that has none.
     expect(res.body).toContain('addEventListener("scroll"');
     expect(res.body).not.toContain("IntersectionObserver");
