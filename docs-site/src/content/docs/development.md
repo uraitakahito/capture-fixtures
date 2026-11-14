@@ -11,8 +11,10 @@ pnpm run build   # emit dist/
 pnpm start       # run dist/serve.js
 ```
 
-`pnpm run check` is what CI runs. `build` is separate because consumers import
-from `dist/` — see below.
+CI (`ci.yaml`) runs the steps of `pnpm run check` one by one, except `audit`,
+which has a workflow of its own (`audit.yml`, on every pull request and push and
+daily), and then `build`. `build` is separate because consumers import from
+`dist/` — see below.
 
 ## How consumers use it
 
@@ -31,7 +33,9 @@ build capture-fixtures explicitly as part of their own build.
 
 Four places, in this order:
 
-1. **`src/fixture.ts`** — the route.
+1. **`src/fixture.ts`** — the route. A family of pages with bodies of its own
+   keeps them in a module next to it (`src/random.ts`, `src/viewport.ts`), and
+   `fixture.ts` serves them.
 2. **`src/scenarios.ts`** — the typed entry, inside the `// #region scenarios`
    markers. Consumers must never hard-code the path.
 3. **`test/scenarios.test.ts`** — a parameterised entry (a builder function)
