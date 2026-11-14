@@ -899,6 +899,35 @@ BrowserHive の窓では、`width-l-1x`・`height-tall-1x`・`js-1x`・`jsheight
 
 名前を字で描いた 320 × 80 の絵です。ここのページが求める名前にだけ答え、ほかは存在しない絵として 404 にします。
 
+## フレームで組んだホームページ
+
+`/portrait/` は昔の形で組んだホームページです。
+一番上の文書には `<frameset cols=18,82>` しか無く、左の枠（`name="left"`）に `menu.htm`、右の枠（`name="right"`）に `top.htm` が入ります。
+右の枠には顔の写真があります。
+使うのは次の 2 つです（CAPTURE-147）。
+
+- **BrowserHive の、子のフレームごとの文書の写し。** 描かれたときの文書を残す取り込みは、`<frame>` の中の文書まで見つけなければなりません。一番上の文書だけを写すと、空の frameset が残ります。
+- **[capture-scripts](https://github.com/uraitakahito/capture-scripts) の `face-mustache` スクリプト。** 取り込みのページで走り、写真を見つけるには右の枠の中まで入らなければなりません。
+
+| パス | 中身 |
+|---|---|
+| `/portrait/` | frameset |
+| `/portrait/menu.htm` | 左の枠。リンクは 1 本で、右の枠に `top.htm` を開く |
+| `/portrait/top.htm` | 右の枠。350 × 522 で描く写真と、説明の字と、お知らせの欄 |
+| `/portrait/mona.jpg` | 写真。500 × 745 の JPEG |
+| `/portrait` | `/portrait/` への 301 |
+
+真似た頁と同じく、参照はどれも相対（`menu.htm`・`top.htm`・`mona.jpg`）なので、頁は `/portrait/` の下でしか働きません。
+`/portrait` から解くと `menu.htm` は `/menu.htm` になります。転送はそのためです。
+ほかのホストは参照しません。
+字は、真似た頁と同じく日本語です（`src/portrait.ts`）。
+
+写真は [Wikimedia Commons](https://commons.wikimedia.org/) の "Mona Lisa, by Leonardo da Vinci, from C2RMF retouched" を幅 500 px に縮めた物です。
+絵も写真も public domain です（PD-Art）。
+ファイルは `site/portrait/mona.jpg` で、そのまま commit しています。
+server は作るときに 1 度だけ読むので、ファイルが無ければ fixture は起動しません。
+`site/` のほかのファイルと同じく、`/assets/portrait/mona.jpg` でも配ります。
+
 ## イントロスペクション
 
 テスト専用のエンドポイントです。
