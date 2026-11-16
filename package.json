@@ -1,6 +1,6 @@
 {
   "name": "capture-fixtures",
-  "version": "0.1.0",
+  "version": "0.38.1",
   "description": "Shared Fastify fixture-origin — the synthetic internet that Chrome visits in BrowserHive and capture-ledger integration tests.",
   "type": "module",
   "exports": {
