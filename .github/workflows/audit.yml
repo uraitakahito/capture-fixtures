@@ -1,7 +1,8 @@
 name: audit
 
 # Known-vulnerability gate for both lockfiles: pnpm-lock.yaml (the fixtures app)
-# and docs-site/package-lock.json (npm — `pnpm audit` never reads it).
+# and docs-site/package-lock.json (npm — `pnpm audit` never reads it;
+# npm audit has no ignore list, so it runs through scripts/npm-audit.mjs).
 #
 # Advisories are published independently of our pull requests, so this also runs
 # every day. On 2026-09-13 the docs-site lockfile carried a critical astro advisory
