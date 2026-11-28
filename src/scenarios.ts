@@ -324,9 +324,9 @@ export const scenarios = {
    * {@link scenarios.exemptLikes} — all three forbidden as well.
    *
    * For a crawler that can be told to capture a forbidden page anyway, by host
-   * and path pattern. An exception for `/exempt/status/` fetches two pages from
-   * here; a crawler that ignores robots fetches three, and one with no
-   * exception fetches none.
+   * and path pattern. With exceptions for this page and for `/exempt/status/`
+   * only, a crawler fetches two pages from here; one that ignores robots
+   * fetches three, and one with no exception never fetches this page.
    */
   exemptHub: "/exempt/hub",
   /**

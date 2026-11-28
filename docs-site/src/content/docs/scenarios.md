@@ -559,8 +559,9 @@ and every page is served anyway — for the same reason `/links/hidden` is.
 Two of the hub's links share a path pattern and the third does not. That is what
 makes the set discriminating: with an exception for the hub and for
 `/exempt/status/`, a crawler fetches the two status pages and never
-`/exempt/likes`. One that fetches all three is ignoring robots, not applying an
-exception, and one with no exception at all never fetches the hub.
+`/exempt/likes`. With exceptions on those two only, one that fetches all three
+is ignoring robots, not applying an exception, and one with no exception at all
+never fetches the hub.
 
 The pages sit under a prefix of their own rather than on `/links/hub`, because
 every `/links/*` page is measured against the hub's four links.

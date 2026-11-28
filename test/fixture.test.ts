@@ -1157,6 +1157,7 @@ describe("link scenarios", () => {
   it("/exempt/status/:id rejects an id that is not a number in range", async () => {
     expect((await app.inject("/exempt/status/0")).statusCode).toBe(400);
     expect((await app.inject("/exempt/status/abc")).statusCode).toBe(400);
+    expect((await app.inject("/exempt/status/201")).statusCode).toBe(400);
   });
 });
 
