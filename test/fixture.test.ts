@@ -1122,6 +1122,7 @@ describe("link scenarios", () => {
 
     expect(res.headers["content-type"]).toContain("text/plain");
     expect(res.body).toContain("Disallow: /links/hidden");
+    expect(res.body).toContain("Disallow: /exempt/");
     // 3s, not 1s. A delay shorter than a consumer's own spacing is
     // indistinguishable from being ignored — the consumer's value would
     // dominate and the test would pass either way.
@@ -1132,6 +1133,31 @@ describe("link scenarios", () => {
     // If the page 404'd, a crawler that ignores robots would also fail to fetch
     // it, and the scenario would pass for the wrong reason.
     await fetchOk(app, "/links/hidden");
+  });
+
+  it("/exempt/hub links to two status pages and to likes, and to nothing else", async () => {
+    const res = await fetchOk(app, "/exempt/hub");
+    expect(res.body).toContain('href="/exempt/status/1"');
+    expect(res.body).toContain('href="/exempt/status/2"');
+    expect(res.body).toContain('href="/exempt/likes"');
+    // A consumer counts two fetches for an exception on /exempt/status/ and
+    // three for robots ignored. A fourth link would move one of the counts.
+    expect(res.body.match(/<a href=/g)).toHaveLength(3);
+  });
+
+  it.each(["/exempt/status/1", "/exempt/status/2", "/exempt/likes"])(
+    "%s is served, and is a dead end",
+    async (path) => {
+      // Served, as /links/hidden is: robots is the only thing keeping it out.
+      const res = await fetchOk(app, path);
+      expect(res.body).not.toContain("<a ");
+    },
+  );
+
+  it("/exempt/status/:id rejects an id that is not a number in range", async () => {
+    expect((await app.inject("/exempt/status/0")).statusCode).toBe(400);
+    expect((await app.inject("/exempt/status/abc")).statusCode).toBe(400);
+    expect((await app.inject("/exempt/status/201")).statusCode).toBe(400);
   });
 });
 

@@ -517,12 +517,33 @@ hub の 4 本は `/links/frame/menu` にあり（どれも `target="right"`）�
 404 ではなく**配信する**。無ければ、robots を無視するクローラも取得に失敗し、この scenario は
 誤った理由で緑になる。
 
+### `/exempt/hub` ほか、`/exempt/` の下の頁 ― 禁じられていて、例外を作る相手
+
+robots が禁じるページを、ホストとパスの型で指して「それでも撮る」と言えるクローラのための頁。
+`/robots.txt` は `/exempt/` の接頭辞をまるごと `Disallow` していて、hub もその中にある。
+それでもどの頁も**配信する**。理由は `/links/hidden` と同じ。
+
+| 頁 | 中身 |
+|---|---|
+| `/exempt/hub` | 起点。`/exempt/status/1`・`/exempt/status/2`・`/exempt/likes` へのリンクだけを持つ |
+| `/exempt/status/:id` | リンクを持たないページ。`id`（1〜200）は URL だけを変える。それ以外の `id` は 400 |
+| `/exempt/likes` | リンクを持たないページ。status の頁の型には当たらない |
+
+hub の 3 本のうち 2 本は同じパスの型に当たり、残りの 1 本は当たらない。これがこの組を
+見分けられるものにしている。hub と `/exempt/status/` に例外を置いたクローラは、status の 2 枚を
+取り、`/exempt/likes` は決して取らない。例外がその 2 つだけなのに 3 枚とも取るなら、それは
+例外を当てているのではなく robots を無視している。例外が 1 つも無ければ、hub も取らない。
+
+`/links/hub` に足さず、別の接頭辞の下に置いている。`/links/*` のページはどれも hub の 4 本を
+物差しにしているため。
+
 ### `/robots.txt` ― ここにある唯一の robots 方針
 
 ```
 User-agent: *
 Crawl-delay: 3
 Disallow: /links/hidden
+Disallow: /exempt/
 ```
 
 パラメータを取らず固定。クローラは `/robots.txt` をクエリ無しで取りに来るので、ノブは

@@ -537,6 +537,34 @@ const LINK_HIDDEN_HTML = `<!doctype html><html><head><meta charset="utf-8"><titl
 </body></html>`;
 
 /**
+ * A seed whose every link `/robots.txt` forbids — and which is forbidden itself.
+ *
+ * For a crawler that can be told to capture a forbidden page anyway, by host
+ * and path pattern. Two links share a pattern (`/exempt/status/`) and the third
+ * does not, so an exception for the first two can be told apart from robots
+ * being ignored: the first fetches two pages from here, the second three.
+ *
+ * Kept off `/links/hub` on purpose. A fifth link there would change what every
+ * `/links/*` sibling is measured against.
+ */
+const EXEMPT_HUB_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>exempt hub</title></head><body>
+<h1>exempt hub</h1>
+<a href="/exempt/status/1">status 1</a>
+<a href="/exempt/status/2">status 2</a>
+<a href="/exempt/likes">likes</a>
+</body></html>`;
+
+/** A page with no outbound links under `/exempt/status/`. The id changes the URL and nothing else. */
+const EXEMPT_STATUS_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>status</title></head><body>
+<h1>status</h1>
+</body></html>`;
+
+/** A page with no outbound links, forbidden like its siblings and outside their pattern. */
+const EXEMPT_LIKES_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>likes</title></head><body>
+<h1>likes</h1>
+</body></html>`;
+
+/**
  * One link for each way a crawl rule can decide.
  *
  * With the rules
@@ -858,10 +886,14 @@ const MARKED_PIXEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="64" hei
  * space its own requests. A shorter value would be indistinguishable from being
  * ignored: the consumer's own spacing would dominate and the test would pass
  * whether or not robots was read at all.
+ *
+ * `/exempt/` is a prefix of its own, so the pages under it never change what
+ * `/links/hub` and its siblings measure.
  */
 const ROBOTS_TXT = `User-agent: *
 Crawl-delay: 3
 Disallow: /links/hidden
+Disallow: /exempt/
 `;
 
 const FAILING_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>retry</title></head><body><h1>retry</h1></body></html>`;
@@ -1084,7 +1116,7 @@ const MAX_AFTER_MS = 120_000;
  * only make the archive slow to produce and the failure slow to read.
  */
 const MAX_FAN_OUT = 200;
-/** Ceiling for `/links/leaf/:id`. Ids only have to outnumber `MAX_FAN_OUT`. */
+/** Ceiling for `/links/leaf/:id` and `/exempt/status/:id`. Ids only have to outnumber `MAX_FAN_OUT`. */
 const MAX_LEAF_ID = 200;
 const MAX_HOPS = 20;
 const MAX_FAIL_TIMES = 100;
@@ -1449,6 +1481,11 @@ export function buildFixture(): FastifyInstance {
   app.get("/links/hidden", (_request, reply) => reply.type("text/html").send(LINK_HIDDEN_HTML));
   app.get("/links/rules", (_request, reply) => reply.type("text/html").send(LINK_RULES_HTML));
 
+  // Everything under /exempt/ is forbidden by /robots.txt and served anyway, as
+  // /links/hidden is: a 404 would keep out a crawler that ignores robots too.
+  app.get("/exempt/hub", (_request, reply) => reply.type("text/html").send(EXEMPT_HUB_HTML));
+  app.get("/exempt/likes", (_request, reply) => reply.type("text/html").send(EXEMPT_LIKES_HTML));
+
   // The hub's links one document down, inside frames. The top documents hold no
   // anchor; the frame documents are never seeds on their own.
   app.get("/links/frame/menu", (_request, reply) =>
@@ -1588,6 +1625,12 @@ export function buildFixture(): FastifyInstance {
     "/links/leaf/:id",
     { schema: { params: numbers({ id: [1, MAX_LEAF_ID] }, ["id"]) } },
     (_request, reply) => reply.type("text/html").send(LINK_LEAF_HTML),
+  );
+
+  app.get<{ Params: { id: number } }>(
+    "/exempt/status/:id",
+    { schema: { params: numbers({ id: [1, MAX_LEAF_ID] }, ["id"]) } },
+    (_request, reply) => reply.type("text/html").send(EXEMPT_STATUS_HTML),
   );
 
   app.get<{ Params: { n: number } }>(

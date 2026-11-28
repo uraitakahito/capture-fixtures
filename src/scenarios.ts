@@ -319,11 +319,34 @@ export const scenarios = {
    */
   linkIframeBlank: "/links/iframe-blank",
   /**
-   * `Disallow: /links/hidden` and `Crawl-delay: 3`. The only robots policy here.
+   * A seed that {@link scenarios.robotsTxt} forbids, linking to
+   * {@link scenarios.exemptStatus} `(1)` and `(2)` and to
+   * {@link scenarios.exemptLikes} — all three forbidden as well.
+   *
+   * For a crawler that can be told to capture a forbidden page anyway, by host
+   * and path pattern. With exceptions for this page and for `/exempt/status/`
+   * only, a crawler fetches two pages from here; one that ignores robots
+   * fetches three, and one with no exception never fetches this page.
+   */
+  exemptHub: "/exempt/hub",
+  /**
+   * A page with no outbound links under `/exempt/status/`, forbidden by
+   * {@link scenarios.robotsTxt}. `id` only changes the URL.
+   */
+  exemptStatus: (id: number): string => `/exempt/status/${String(id)}`,
+  /**
+   * Forbidden by {@link scenarios.robotsTxt} like {@link scenarios.exemptStatus},
+   * and outside its path pattern — the page an exception for the status pages
+   * must still leave alone.
+   */
+  exemptLikes: "/exempt/likes",
+  /**
+   * `Disallow: /links/hidden`, `Disallow: /exempt/` and `Crawl-delay: 3`. The
+   * only robots policy here.
    *
    * Fixed rather than parameterised, because a crawler fetches `/robots.txt`
    * with no query string — a knob could never reach it. Tests assert against
-   * these two values.
+   * these three values.
    *
    * The delay is 3s so that it can be seen to win: a consumer whose own spacing
    * is shorter must end up waiting 3s between requests, and a consumer that

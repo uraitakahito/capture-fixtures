@@ -10,6 +10,7 @@ describe("scenarios URL contract", () => {
     expect(scenarios.slowResponse(30000)).toBe("/slow-response?delayMs=30000");
     expect(scenarios.httpStatus(404)).toBe("/http-status/404");
     expect(scenarios.serverRedirectChain(3)).toBe("/server-redirect-chain/3");
+    expect(scenarios.exemptStatus(2)).toBe("/exempt/status/2");
     expect(scenarios.largeBody(2048)).toBe("/large-body?bytes=2048");
     expect(scenarios.slowBody(100, 500)).toBe("/slow-body?bytes=100&overMs=500");
     expect(scenarios.fetchLate(0, 5000)).toBe("/fetch-late?afterMs=0&takesMs=5000");
@@ -125,6 +126,7 @@ describe("every scenario reaches the fixture", () => {
     ["linkFanOut", scenarios.linkFanOut(3)],
     ["linkTrap", scenarios.linkTrap(1)],
     ["linkIframeOther", scenarios.linkIframeOther("http://capture-fixtures-1-b.browserhive:8080")],
+    ["exemptStatus", scenarios.exemptStatus(1)],
     ["markedPage", scenarios.markedPage("secret", "contract")],
     ["markedText", scenarios.markedText("secret", "contract")],
     ["markedServerRedirect", scenarios.markedServerRedirect(1, "secret", "contract")],
