@@ -67,8 +67,9 @@ submodule はソースがビルドされないままチェックアウトされ�
 ## ドキュメント
 
 ```sh
-pnpm run site:dev     # ローカルプレビュー
-pnpm run site:check   # ビルド + 参照がすべて解決することを検証
+npm ci --prefix docs-site  # checkout ごとに 1 度（docs-site/ は別の npm の project）
+pnpm run site:dev          # ローカルプレビュー
+pnpm run site:check        # ビルド + 参照がすべて解決することを検証
 ```
 
 `site:check` は、ソースか docs に触れるプルリクエストの CI で走ります

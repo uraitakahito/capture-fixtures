@@ -70,8 +70,9 @@ parameter rather than a constant.
 ## Documentation
 
 ```sh
-pnpm run site:dev     # local preview
-pnpm run site:check   # build + verify every doc reference resolves
+npm ci --prefix docs-site  # once per checkout (docs-site/ is an npm project of its own)
+pnpm run site:dev          # local preview
+pnpm run site:check        # build + verify every doc reference resolves
 ```
 
 `site:check` runs in CI on every pull request that touches the sources or the

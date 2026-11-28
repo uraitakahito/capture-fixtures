@@ -18,7 +18,7 @@ it reproduces, and development — lives on the docs site:
 ## Related Projects
 
 - [BrowserHive](https://github.com/uraitakahito/browserhive) — a web-capture server; capture-fixtures is what its E2E suite captures against (git submodule).
-- [capture-ledger](https://github.com/uraitakahito/capture-ledger) — reads URLs from Postgres and drives BrowserHive.
+- [capture-ledger](https://github.com/uraitakahito/capture-ledger) — reads URLs from Postgres and drives BrowserHive; capture-fixtures is the site its development stack captures (git submodule, profile `capture-fixtures`).
 
 ## License
 
