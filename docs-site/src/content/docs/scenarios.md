@@ -544,12 +544,34 @@ A plain page, linked from the hub and disallowed by `/robots.txt`.
 It is served, not 404'd. If it were missing, a crawler ignoring robots would also
 fail to fetch it and the scenario would pass for the wrong reason.
 
+### `/exempt/hub` and the pages under `/exempt/` — forbidden, with an exception to make
+
+For a crawler that can be told to capture a page robots forbids, by host and path
+pattern. `/robots.txt` disallows the whole `/exempt/` prefix, the hub included,
+and every page is served anyway — for the same reason `/links/hidden` is.
+
+| Page | What it is |
+|---|---|
+| `/exempt/hub` | the seed: links to `/exempt/status/1`, `/exempt/status/2` and `/exempt/likes`, and to nothing else |
+| `/exempt/status/:id` | a page with no outbound links; `id` (1 to 200) changes the URL and nothing else, any other `id` is a 400 |
+| `/exempt/likes` | a page with no outbound links, outside the status pages' pattern |
+
+Two of the hub's links share a path pattern and the third does not. That is what
+makes the set discriminating: with an exception for the hub and for
+`/exempt/status/`, a crawler fetches the two status pages and never
+`/exempt/likes`. One that fetches all three is ignoring robots, not applying an
+exception, and one with no exception at all never fetches the hub.
+
+The pages sit under a prefix of their own rather than on `/links/hub`, because
+every `/links/*` page is measured against the hub's four links.
+
 ### `/robots.txt` — the only robots policy here
 
 ```
 User-agent: *
 Crawl-delay: 3
 Disallow: /links/hidden
+Disallow: /exempt/
 ```
 
 Fixed rather than parameterised: a crawler fetches `/robots.txt` with no query
