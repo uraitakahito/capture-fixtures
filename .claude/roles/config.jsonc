@@ -1,0 +1,43 @@
+// roster（uraitakahito/roster）の担当が push するときの設定。書いていない欄は既定のまま。
+{
+  // roster push が、push の前に流す確かめ（書き方は roster の docs-site の設定のページの「push の前の確かめ」）。
+  // CI（ci.yaml・actionlint.yml・hadolint.yml・site.yml）の中で、通信に依らず手元で流せる物。
+  // 入れない物: audit・safe-chain（通信に依る）・docker（image）・release-version（PR の題）。
+  // roster push は origin/main のこの欄を読むので、変えた一覧は merge の後から効く。
+  "push": {
+    "checks": [
+      {
+        "name": "actionlint",
+        "run": ["actionlint"],
+      },
+      {
+        "name": "hadolint",
+        "run": ["hadolint", "--failure-threshold", "error", "Dockerfile"],
+      },
+      {
+        "name": "typecheck",
+        "run": ["pnpm", "run", "typecheck"],
+      },
+      {
+        "name": "lint",
+        "run": ["pnpm", "run", "lint"],
+      },
+      {
+        "name": "test-hosts",
+        "run": ["pnpm", "run", "check:test-hosts"],
+      },
+      {
+        "name": "test",
+        "run": ["pnpm", "test"],
+      },
+      {
+        "name": "build",
+        "run": ["pnpm", "run", "build"],
+      },
+      {
+        "name": "site",
+        "run": ["pnpm", "run", "site:check"],
+      },
+    ],
+  },
+}
